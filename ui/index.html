@@ -126,22 +126,21 @@
 
         .clear-all-btn {
             position: fixed;
-            right: 16px;
-            bottom: 16px;
-            width: 32px;
-            height: 32px;
+            bottom: 70px;
+            right: 20px;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
             background: var(--danger);
             color: white;
             border: none;
+            font-size: 18px;
             cursor: pointer;
-            font-size: 14px;
-            transition: all 0.2s ease;
-            box-shadow: 0 2px 8px var(--shadow);
-            z-index: 1000;
             display: none;
             align-items: center;
             justify-content: center;
+            transition: all 0.3s ease;
+            z-index: 100;
         }
 
         .clear-all-btn:hover {
@@ -368,11 +367,6 @@
                 font-size: 14px;
             }
 
-            .test-btn {
-                padding: 6px 10px;
-                font-size: 11px;
-            }
-
             .theme-toggle {
                 width: 32px;
                 height: 32px;
@@ -407,6 +401,12 @@
 <body>
     <!-- Tauri API 初始化脚本 - 必须在所有脚本之前加载 -->
     <script src="tauri-api.js"></script>
+    
+    <!-- Tauri v2 事件 API -->
+    <script type="module">
+        import { listen } from 'https://cdn.jsdelivr.net/npm/@tauri-apps/api@2/event.js';
+        window.__TAURI_LISTEN__ = listen;
+    </script>
 
 
 
@@ -428,8 +428,6 @@
             🗑️
         </button>
 
-        <!-- 测试设置窗口按钮 -->
-        <button id="testSettingsBtn" onclick="testSettingsWindow()" style="display: none;">测试设置窗口</button>
     </div>
 
     <script>
@@ -487,9 +485,9 @@
             try {
                 console.log('🔄 初始化系统主题监听器...');
 
-                // 使用Tauri事件系统监听主题变化
-                if (window.__TAURI__ && window.__TAURI__.event && window.__TAURI__.event.listen) {
-                    const { listen } = window.__TAURI__.event;
+                // 使用 Tauri v2 的事件监听 API
+                const listen = window.__TAURI_LISTEN__;
+                if (typeof listen === 'function') {
 
                     await listen('tauri://theme-changed', (event) => {
                         console.log('🎨 系统主题已更改:', event.payload);
@@ -594,8 +592,20 @@
 
 
 
+        function isSavedPositionValid(position) {
+            if (!position) return false;
+
+            const screenWidth = window.screen?.width || 0;
+            const screenHeight = window.screen?.height || 0;
+
+            const offscreenThreshold = -10000;
+            const exceedsScreen = screenWidth && screenHeight && (position.x > screenWidth * 2 || position.y > screenHeight * 2);
+
+            return position.x > offscreenThreshold && position.y > offscreenThreshold && !exceedsScreen;
+        }
+
         async function restoreWindowPosition() {
-            if (typeof window.__TAURI__ === 'undefined') {
+            if (typeof window.__TAURI_INTERNALS__ === 'undefined') {
                 console.warn('⚠️ Tauri API 不可用，无法恢复窗口位置');
                 return;
             }
@@ -608,12 +618,23 @@
                 }
 
                 const position = JSON.parse(savedPosition);
-                const { getCurrentWindow } = window.__TAURI__.window;
+                const { getCurrentWindow } = window.__TAURI_INTERNALS__.window;
                 const appWindow = getCurrentWindow();
 
-                // 使用 LogicalPosition
-                const { LogicalPosition } = window.__TAURI__.window;
+                if (!isSavedPositionValid(position)) {
+                    console.warn('⚠️ 保存的窗口位置无效，重置到默认位置');
+                    localStorage.removeItem('windowPosition');
+                    await appWindow.center();
+                    await appWindow.setSize({ width: 380, height: 600 });
+                    await appWindow.unminimize();
+                    await appWindow.show();
+                    return;
+                }
+
+                const { LogicalPosition } = window.__TAURI_INTERNALS__.window;
                 await appWindow.setPosition(new LogicalPosition(position.x, position.y));
+                await appWindow.unminimize();
+                await appWindow.show();
 
                 console.log('📍 窗口位置已恢复:', position);
             } catch (error) {
@@ -661,17 +682,21 @@
                 console.log('✅ 使用 Tauri v2 API (__TAURI_INTERNALS__)');
 
                 try {
-                    let listen;
-
-                    // 尝试从 __TAURI__.event.listen 获取 (最可能的位置)
-                    if (typeof window.__TAURI__ !== 'undefined' && window.__TAURI__.event && typeof window.__TAURI__.event.listen === 'function') {
-                        listen = window.__TAURI__.event.listen;
-                        console.log('✅ 使用 window.__TAURI__.event.listen');
-                    } else {
-                        throw new Error('window.__TAURI__.event.listen 不可用，请检查 Tauri 配置');
+                    // 等待 Tauri v2 事件 API 加载
+                    let listen = window.__TAURI_LISTEN__;
+                    let retries = 0;
+                    while (!listen && retries < 10) {
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        listen = window.__TAURI_LISTEN__;
+                        retries++;
+                    }
+                    
+                    if (typeof listen !== 'function') {
+                        console.error('❌ listen 不是函数，类型:', typeof listen);
+                        throw new Error('window.__TAURI_LISTEN__ 不可用');
                     }
 
-                    console.log('listen 函数类型:', typeof listen);
+                    console.log('✅ 成功获取 listen 函数');
 
                     // 注册 gotify-message 监听器
                     console.log('正在注册 gotify-message 监听器...');
@@ -679,9 +704,17 @@
                         console.log('🎉🎉🎉 收到 gotify-message 事件！');
                         console.log('事件对象:', event);
                         console.log('事件 payload:', event.payload);
-                        addNotification(event.payload);
+                        console.log('事件 payload 类型:', typeof event.payload);
+                        
+                        // 确保 payload 存在
+                        if (event.payload) {
+                            addNotification(event.payload);
+                        } else {
+                            console.warn('⚠️ 事件 payload 为空');
+                        }
                     });
-                    console.log('✅ gotify-message 监听器注册成功！unlisten:', unlisten1);
+                    console.log('✅ gotify-message 监听器注册成功！');
+                    console.log('✅ 监听器已激活，等待接收消息...');
 
                     // 注册 show-settings 监听器
                     console.log('正在注册 show-settings 监听器...');
@@ -707,11 +740,21 @@
                     console.error('错误对象:', error);
                     console.error('错误消息:', error.message);
                     console.error('错误堆栈:', error.stack);
+                    
+                    // 即使监听器注册失败，也要显示界面
+                    console.log('⚠️ 尝试恢复窗口位置和初始化主题...');
+                    try {
+                        await restoreWindowPosition();
+                        await initWindowPositionTracking();
+                        await initSystemThemeListener();
+                    } catch (e) {
+                        console.error('恢复失败:', e);
+                    }
                 }
             } else if (typeof window.__TAURI__ !== 'undefined') {
                 console.log('⚠️ 检测到 Tauri v1 API，尝试使用 v1 方式');
 
-                if (window.__TAURI__.event && window.__TAURI__.event.listen) {
+                try {
                     const { listen } = window.__TAURI__.event;
 
                     await listen('gotify-message', (event) => {
@@ -720,6 +763,8 @@
                     });
 
                     console.log('✅ v1 监听器已设置');
+                } catch (error) {
+                    console.error('❌❌❌ 注册监听器时出错 (v1):', error);
                 }
             } else {
                 console.error('❌❌❌ Tauri API 完全不可用！');
@@ -853,26 +898,17 @@
             const index = notifications.findIndex(n => n.id === id);
             if (index !== -1) {
                 notifications.splice(index, 1);
-                renderNotifications();
                 console.log(`🗑️ 通知 ${id} 已删除`);
             }
         }
 
-        // 测试设置窗口
-        async function testSettingsWindow() {
-            if (typeof window.__TAURI_INTERNALS__ === 'undefined') {
-                console.warn('⚠️ Tauri API 不可用，无法测试设置窗口');
-                return;
-            }
-
-            try {
-                console.log('🧪 测试调用设置窗口...');
-                const { invoke } = window.__TAURI_INTERNALS__;
-                await invoke('test_settings_window');
-                console.log('✅ 设置窗口测试完成');
-            } catch (error) {
-                console.error('❌ 测试设置窗口失败:', error);
-            }
+        // 清除所有通知（保留置顶）
+        function clearAllNotifications() {
+            const pinnedNotifs = notifications.filter(n => n.pinned);
+            notifications = pinnedNotifs;
+            renderNotifications();
+            console.log('🗑️ 已清除所有非置顶通知');
+            return;
         }
 
         // 显示设置窗口
@@ -900,9 +936,9 @@
             try {
                 console.log('🪟 初始化窗口位置跟踪...');
 
-                // 使用 Tauri 事件监听窗口移动和调整大小
-                if (window.__TAURI__ && window.__TAURI__.event && window.__TAURI__.event.listen) {
-                    const { listen } = window.__TAURI__.event;
+                // 使用 Tauri v2 的事件监听 API
+                const listen = window.__TAURI_LISTEN__;
+                if (typeof listen === 'function') {
 
                     // 监听窗口移动事件
                     await listen('tauri://move', (event) => {

@@ -347,9 +347,9 @@ async fn save_window_position_auto(
 ) -> Result<(), String> {
     let window = app.get_webview_window("main").unwrap();
     
-    // 直接从窗口获取位置和大小
+    // 统一使用 outer_position 获取左上角坐标，inner_size 获取内容区域大小
     let position = window.outer_position().map_err(|e| format!("获取位置失败: {}", e))?;
-    let size = window.outer_size().map_err(|e| format!("获取大小失败: {}", e))?;
+    let size = window.inner_size().map_err(|e| format!("获取大小失败: {}", e))?;
     
     let window_pos = WindowPosition {
         x: position.x,
@@ -509,10 +509,14 @@ async fn run_websocket(
                             // 发送消息到前端
                             println!("📤 发送消息到前端...");
                             
-                            // 发送到前端
-                            match app.emit("gotify-message", &gotify_msg) {
-                                Ok(_) => println!("✅ 消息已推送到前端"),
-                                Err(e) => eprintln!("❌ 推送失败: {}", e),
+                            // 发送到前端 - 使用 emit_to 指定目标窗口
+                            if let Some(window) = app.get_webview_window("main") {
+                                match window.emit("gotify-message", &gotify_msg) {
+                                    Ok(_) => println!("✅ 消息已推送到前端"),
+                                    Err(e) => eprintln!("❌ 推送失败: {}", e),
+                                }
+                            } else {
+                                eprintln!("❌ 无法找到主窗口");
                             }
                         }
                     }
@@ -569,27 +573,44 @@ pub fn run() {
                 let _ = main_window.show();
                 let _ = main_window.set_focus();
                 
+                let mut should_restore = false;
+                
                 if let Ok(content) = std::fs::read_to_string(&config_path) {
                     if let Ok(position) = serde_json::from_str::<WindowPosition>(&content) {
-                        println!("🪟 恢复窗口位置: x={}, y={}, w={}, h={}", position.x, position.y, position.width, position.height);
+                        // 验证位置有效性：不能是屏幕外的极端坐标
+                        let is_valid = position.x > -10000 && position.y > -10000 && 
+                                      position.width > 0 && position.height > 0 &&
+                                      position.width < 10000 && position.height < 10000;
                         
-                        // 设置窗口位置和大小
-                        let _ = main_window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
-                            x: position.x,
-                            y: position.y,
-                        }));
-                        let _ = main_window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
-                            width: position.width,
-                            height: position.height,
-                        }));
-                        
-                        // 更新状态
-                        let mut window_position = state.window_position.lock().unwrap();
-                        *window_position = Some(position);
+                        if is_valid {
+                            println!("🪟 恢复窗口位置: x={}, y={}, w={}, h={}", position.x, position.y, position.width, position.height);
+                            
+                            // 设置窗口位置和大小 - 统一使用外部坐标
+                            let _ = main_window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+                                x: position.x,
+                                y: position.y,
+                            }));
+                            let _ = main_window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
+                                width: position.width,
+                                height: position.height,
+                            }));
+                            
+                            // 更新状态
+                            let mut window_position = state.window_position.lock().unwrap();
+                            *window_position = Some(position);
+                            should_restore = true;
+                        } else {
+                            println!("⚠️ 保存的窗口位置无效（x={}, y={}, w={}, h={}），将重置", position.x, position.y, position.width, position.height);
+                            // 删除无效的保存文件
+                            let _ = std::fs::remove_file(&config_path);
+                        }
                     }
                 } else {
                     println!("ℹ️ 未找到保存的窗口位置，使用默认位置");
-                    // 如果没有保存的位置，居中显示
+                }
+                
+                // 如果没有成功恢复位置，则居中显示
+                if !should_restore {
                     let _ = main_window.center();
                 }
 
