@@ -1,4 +1,5 @@
-# Gotify Notifier
+# Gotify<img width="378" height="873" alt="截屏2026-01-17 02 49 51" src="https://github.com/user-attachments/assets/95df44ec-30d6-4cbc-a327-99cff3ff425b" />
+ Notifier
 
 一个使用 Rust + Tauri 构建的 Gotify 通知客户端，支持 Windows、macOS 和 Linux。
 
@@ -14,7 +15,8 @@
 ## 功能特性
 
 - ✅ 实时接收 Gotify 服务器推送的消息
-- ✅ macOS 系统原生通知
+- ✅ macOS 系统原生通知![Uploading 截屏2026-01-17 02.49.51.png…]()
+
 - ✅ 系统托盘图标，后台运行
 - ✅ 优雅的用户界面
 - ✅ 消息历史记录
