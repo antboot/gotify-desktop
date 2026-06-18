@@ -559,9 +559,23 @@ pub fn run() {
             tray_icon: Arc::new(Mutex::new(None)),
         })
         .setup(|app| {
-            // macOS: 隐藏 Dock 图标，仅显示菜单栏托盘
+            // macOS: 根据用户设置决定是否显示 Dock 图标
             #[cfg(target_os = "macos")]
-            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            {
+                let config_dir = get_config_dir();
+                let dock_path = format!("{}/.gotify_show_in_dock.json", config_dir);
+                let show_in_dock = std::fs::read_to_string(&dock_path)
+                    .ok()
+                    .and_then(|c| serde_json::from_str::<bool>(&c).ok())
+                    .unwrap_or(false);
+
+                let policy = if show_in_dock {
+                    tauri::ActivationPolicy::Regular
+                } else {
+                    tauri::ActivationPolicy::Accessory
+                };
+                app.set_activation_policy(policy);
+            }
 
             let app_handle = app.handle().clone();
             let main_window = app.get_webview_window("main").unwrap();
@@ -735,6 +749,8 @@ pub fn run() {
             get_system_theme,
             get_auto_launch,
             set_auto_launch,
+            get_show_in_dock,
+            set_show_in_dock,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -843,6 +859,37 @@ fn set_auto_launch(enabled: bool) -> Result<(), String> {
                 .output();
             let _ = std::fs::remove_file(&plist_path);
         }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn get_show_in_dock() -> bool {
+    let config_dir = get_config_dir();
+    let path = format!("{}/.gotify_show_in_dock.json", config_dir);
+    std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|c| serde_json::from_str::<bool>(&c).ok())
+        .unwrap_or(false)
+}
+
+#[tauri::command]
+fn set_show_in_dock(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    let config_dir = get_config_dir();
+    let path = format!("{}/.gotify_show_in_dock.json", config_dir);
+    std::fs::write(&path, serde_json::to_string_pretty(&enabled).unwrap())
+        .map_err(|e| format!("保存 Dock 设置失败: {}", e))?;
+
+    // 运行时切换 Dock 显示
+    #[cfg(target_os = "macos")]
+    {
+        let policy = if enabled {
+            tauri::ActivationPolicy::Regular
+        } else {
+            tauri::ActivationPolicy::Accessory
+        };
+        app.set_activation_policy(policy);
     }
 
     Ok(())
