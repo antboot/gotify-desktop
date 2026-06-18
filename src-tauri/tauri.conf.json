@@ -15,7 +15,7 @@
         "title": "🔔 Gotify 通知中心",
         "width": 380,
         "height": 600,
-        "minWidth": 320,
+        "minWidth": 260,
         "minHeight": 200,
         "resizable": true,
         "fullscreen": false,

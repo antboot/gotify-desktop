@@ -5,6 +5,7 @@ use tauri::tray::{TrayIconBuilder, TrayIcon};
 use futures_util::StreamExt;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use image::GenericImageView;
+use std::collections::HashMap;
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 struct GotifyMessage {
@@ -14,6 +15,7 @@ struct GotifyMessage {
     title: String,
     priority: u32,
     date: String,
+    extras: Option<HashMap<String, serde_json::Value>>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -557,6 +559,10 @@ pub fn run() {
             tray_icon: Arc::new(Mutex::new(None)),
         })
         .setup(|app| {
+            // macOS: 隐藏 Dock 图标，仅显示菜单栏托盘
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
             let app_handle = app.handle().clone();
             let main_window = app.get_webview_window("main").unwrap();
             
@@ -644,9 +650,10 @@ pub fn run() {
             use tauri::{menu::{Menu, MenuItem}};
 
             println!("🔧 开始创建系统托盘...");
+            let toggle_item = MenuItem::with_id(app, "toggle", "显示通知", true, None::<&str>)?;
             let settings_item = MenuItem::with_id(app, "settings", "设置", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-            let tray_menu = Menu::with_items(app, &[&settings_item, &quit_item])?;
+            let tray_menu = Menu::with_items(app, &[&toggle_item, &settings_item, &quit_item])?;
 
             // 加载托盘图标 - 解码 PNG 以获得 RGBA 数据
             let icon_png = include_bytes!("../icons/icon.png");
@@ -663,6 +670,17 @@ pub fn run() {
                 .show_menu_on_left_click(true)
                 .on_menu_event(|app, event| {
                     match event.id.as_ref() {
+                        "toggle" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                if window.is_visible().unwrap_or(false) {
+                                    let _ = window.hide();
+                                } else {
+                                    let _ = window.show();
+                                    let _ = window.unminimize();
+                                    let _ = window.set_focus();
+                                }
+                            }
+                        }
                         "settings" => {
                             println!("🖱️ 用户点击了设置菜单");
                             let _ = app.emit("show-settings", ());
@@ -715,7 +733,117 @@ pub fn run() {
             show_settings_window,
             test_settings_window,
             get_system_theme,
+            get_auto_launch,
+            set_auto_launch,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[tauri::command]
+fn get_auto_launch() -> bool {
+    let config_dir = get_config_dir();
+    let path = format!("{}/.gotify_auto_launch.json", config_dir);
+    std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|c| serde_json::from_str::<bool>(&c).ok())
+        .unwrap_or(false)
+}
+
+#[tauri::command]
+fn set_auto_launch(enabled: bool) -> Result<(), String> {
+    let config_dir = get_config_dir();
+    let path = format!("{}/.gotify_auto_launch.json", config_dir);
+    std::fs::write(&path, serde_json::to_string_pretty(&enabled).unwrap())
+        .map_err(|e| format!("保存开机启动设置失败: {}", e))?;
+
+    #[cfg(target_os = "macos")]
+    {
+        let exe = std::env::current_exe().map_err(|e| format!("获取应用路径失败: {}", e))?;
+        let bundle = exe
+            .ancestors()
+            .find(|p| p.extension().and_then(|e| e.to_str()) == Some("app"))
+            .unwrap_or(&exe);
+
+        let bundle_path = bundle.display().to_string();
+
+        if enabled {
+            // 通过 AppleScript 添加到登录项（显示在系统设置的登录项中）
+            let script = format!(
+                "tell application \"System Events\" to make login item at end with properties {{path:\"{}\", hidden:false}}",
+                bundle_path
+            );
+            let result = std::process::Command::new("osascript")
+                .args(&["-e", &script])
+                .output()
+                .map_err(|e| format!("添加开机启动失败: {}", e))?;
+            if !result.status.success() {
+                let stderr = String::from_utf8_lossy(&result.stderr);
+                eprintln!("⚠️ 添加登录项结果: {}", stderr);
+            } else {
+                println!("✅ 已添加登录项: {}", bundle_path);
+            }
+
+            // 额外创建 launchd plist 作为备份（部分 macOS 版本需要）
+            let label = "com.gotify.notifier";
+            let plist_path = format!(
+                "{}/Library/LaunchAgents/{}.plist",
+                std::env::var("HOME").unwrap_or_else(|_| ".".to_string()),
+                label
+            );
+            let plist = format!(
+                r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{}</string>
+    <key>Program</key>
+    <string>{}</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <false/>
+</dict>
+</plist>"#,
+                label,
+                bundle_path
+            );
+            let _ = std::fs::write(&plist_path, &plist);
+        } else {
+            // 从登录项移除
+            let name = bundle
+                .file_stem()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+            let result = std::process::Command::new("osascript")
+                .args(&["-e", &format!(
+                    "tell application \"System Events\" to delete login item \"{}\"",
+                    name
+                )])
+                .output()
+                .map_err(|e| format!("移除开机启动失败: {}", e))?;
+            if !result.status.success() {
+                let stderr = String::from_utf8_lossy(&result.stderr);
+                println!("ℹ️ 删除登录项（可能不存在）: {}", stderr);
+            } else {
+                println!("✅ 已移除登录项: {}", name);
+            }
+
+            // 同时清理 launchd plist
+            let label = "com.gotify.notifier";
+            let plist_path = format!(
+                "{}/Library/LaunchAgents/{}.plist",
+                std::env::var("HOME").unwrap_or_else(|_| ".".to_string()),
+                label
+            );
+            let _ = std::process::Command::new("launchctl")
+                .args(&["unload", &plist_path])
+                .output();
+            let _ = std::fs::remove_file(&plist_path);
+        }
+    }
+
+    Ok(())
 }

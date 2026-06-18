@@ -57,9 +57,11 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Roboto, sans-serif;
             background: var(--bg-primary);
+            color: var(--text-primary);
             padding: 0;
             margin: 0;
             min-height: 100vh;
+            overflow: hidden;
             transition: background 0.3s ease, color 0.3s ease;
         }
 
@@ -68,14 +70,15 @@
             max-width: 100%;
             position: relative;
             min-height: 100vh;
+            background: var(--bg-primary);
+            color: var(--text-primary);
         }
 
         .notifications-container {
             display: grid;
             gap: 10px;
             padding: 12px;
-            padding-bottom: 70px;
-            /* 留出空间给右下角按钮 */
+            padding-bottom: 56px;
         }
 
         .theme-toggle {
@@ -126,21 +129,22 @@
 
         .clear-all-btn {
             position: fixed;
-            bottom: 70px;
-            right: 20px;
-            width: 40px;
-            height: 40px;
+            bottom: 16px;
+            right: 16px;
+            width: 32px;
+            height: 32px;
             border-radius: 50%;
             background: var(--danger);
             color: white;
-            border: none;
-            font-size: 18px;
+            border: 1px solid transparent;
+            font-size: 14px;
             cursor: pointer;
             display: none;
             align-items: center;
             justify-content: center;
-            transition: all 0.3s ease;
-            z-index: 100;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px var(--shadow);
+            z-index: 1000;
         }
 
         .clear-all-btn:hover {
@@ -175,15 +179,6 @@
             background: linear-gradient(135deg, var(--card-bg) 0%, var(--card-bg) 100%);
             border: 2px solid var(--accent);
             box-shadow: 0 2px 8px var(--shadow);
-        }
-
-        .notification-card.pinned::after {
-            content: '📌';
-            position: absolute;
-            top: 12px;
-            left: 12px;
-            font-size: 12px;
-            opacity: 0.5;
         }
 
         .notification-card:hover {
@@ -226,8 +221,6 @@
             justify-content: space-between;
             align-items: flex-start;
             margin-bottom: 12px;
-            padding-left: 20px;
-            /* 为置顶图标留出空间 */
         }
 
         .notification-title {
@@ -251,17 +244,127 @@
             white-space: pre-wrap;
             word-wrap: break-word;
             font-size: 13px;
+            max-height: 200px;
+            overflow: hidden;
+            position: relative;
+            transition: max-height 0.3s ease;
+        }
+
+        .notification-message.expanded {
+            max-height: none;
+        }
+
+        .notification-message img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            margin: 8px 0;
+            display: block;
+        }
+
+        .notification-message p {
+            margin-bottom: 8px;
+        }
+
+        .notification-message p:last-child {
+            margin-bottom: 0;
+        }
+
+        .notification-message h1, .notification-message h2, .notification-message h3 {
+            margin: 12px 0 8px 0;
+            font-size: 1.1em;
+            color: var(--text-primary);
+        }
+
+        .notification-message code {
+            background: var(--bg-primary);
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+
+        .notification-message pre {
+            background: var(--bg-primary);
+            padding: 10px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 8px 0;
+        }
+
+        .notification-message blockquote {
+            border-left: 4px solid var(--border-color);
+            padding-left: 12px;
+            color: var(--text-tertiary);
+            margin: 8px 0;
+        }
+
+        .notification-card.expanded .notification-message {
+            max-height: none;
+        }
+
+        .read-more-btn {
+            display: none;
+            width: 100%;
+            padding: 8px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 0 0 10px 10px;
+            color: var(--accent);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            margin-top: -10px;
+            position: relative;
+            z-index: 5;
+        }
+
+        .read-more-btn.visible {
+            display: block;
+        }
+
+        /* 右键菜单 */
+        .context-menu {
+            display: none;
+            position: fixed;
+            z-index: 9999;
+            background: var(--card-bg, #ffffff);
+            border: 1px solid var(--border-color, #e5e7eb);
+            border-radius: 8px;
+            padding: 4px 0;
+            min-width: 180px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+        }
+
+        .context-menu-item {
+            padding: 10px 16px;
+            font-size: 13px;
+            color: var(--text-primary, #1a1a2e);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.15s;
+        }
+
+        .context-menu-item:hover {
+            background: var(--bg-primary, #f5f7fa);
+        }
+
+        .notification-card.expanded .notification-message {
+            max-height: none;
         }
 
         .notification-meta {
-            margin-top: 12px;
-            padding-top: 12px;
+            margin-top: 6px;
+            padding-top: 4px;
             border-top: 1px solid var(--border-color);
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 12px;
+            justify-content: flex-end;
+            font-size: 11px;
             color: var(--text-tertiary);
+            line-height: 1;
         }
 
         .notification-actions {
@@ -273,14 +376,15 @@
             background: var(--bg-secondary);
             border: 1px solid var(--border-color);
             color: var(--text-secondary);
-            padding: 4px 8px;
-            border-radius: 6px;
-            font-size: 16px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 13px;
             cursor: pointer;
             transition: all 0.2s ease;
             display: flex;
             align-items: center;
             justify-content: center;
+            line-height: 1;
         }
 
         .action-btn:hover {
@@ -323,17 +427,23 @@
             text-align: center;
             padding: 60px 20px;
             color: var(--empty-text);
+            user-select: none;
+            -webkit-user-select: none;
         }
 
         .empty-state-icon {
             font-size: 48px;
             margin-bottom: 12px;
             opacity: 0.6;
+            user-select: none;
+            -webkit-user-select: none;
         }
 
         .empty-state-text {
             font-size: 14px;
             font-weight: 500;
+            user-select: none;
+            -webkit-user-select: none;
         }
 
         .new-badge {
@@ -401,6 +511,7 @@
 <body>
     <!-- Tauri API 初始化脚本 - 必须在所有脚本之前加载 -->
     <script src="tauri-api.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     
     <!-- Tauri v2 事件 API -->
     <script type="module">
@@ -418,6 +529,12 @@
             </div>
         </div>
 
+        <!-- 右键菜单 -->
+        <div id="contextMenu" class="context-menu">
+            <div class="context-menu-item" onclick="openSettings()">⚙️ 设置</div>
+            <div class="context-menu-item" onclick="openGotifyWeb()">🌐 网页打开 Gotify</div>
+        </div>
+
         <!-- 主题切换按钮 - 固定在右下角 -->
         <button class="theme-toggle" onclick="toggleTheme()" title="切换主题 (双击跟随系统)" ondblclick="toggleSystemThemeFollow()">
             <span id="theme-icon">🌙</span>
@@ -432,6 +549,7 @@
 
     <script>
         let notifications = [];
+        let serverBaseUrl = '';
         const notificationsContainer = document.getElementById('notifications');
 
         // 初始化主题
@@ -575,20 +693,48 @@
         // 页面加载时初始化主题
         initTheme();
 
-        // 添加右键菜单功能
+        // 右键菜单
         function initContextMenu() {
+            const menu = document.getElementById('contextMenu');
             document.addEventListener('contextmenu', function(e) {
-                e.preventDefault(); // 阻止默认右键菜单
-
-                // 显示设置窗口
-                showSettingsWindow();
-
-                console.log('🖱️ 右键菜单触发，打开设置界面');
+                if (window.getSelection && window.getSelection().toString().length > 0) return;
+                e.preventDefault();
+                menu.style.display = 'block';
+                // 先显示才能获取实际高度
+                const menuW = menu.offsetWidth || 180;
+                const menuH = menu.offsetHeight || 80;
+                let x = e.clientX, y = e.clientY;
+                if (x + menuW > window.innerWidth) x = window.innerWidth - menuW - 8;
+                if (y + menuH > window.innerHeight) y = window.innerHeight - menuH - 8;
+                if (x < 0) x = 8;
+                if (y < 0) y = 8;
+                menu.style.left = x + 'px';
+                menu.style.top = y + 'px';
+            });
+            document.addEventListener('click', function() {
+                menu.style.display = 'none';
             });
         }
-
-        // 初始化右键菜单
         initContextMenu();
+
+        function openSettings() {
+            document.getElementById('contextMenu').style.display = 'none';
+            showSettingsWindow();
+        }
+
+        async function openGotifyWeb() {
+            document.getElementById('contextMenu').style.display = 'none';
+            if (typeof window.__TAURI_INTERNALS__ === 'undefined') return;
+            try {
+                const { invoke } = window.__TAURI_INTERNALS__;
+                const config = await invoke('get_config');
+                if (config && config.server_url) {
+                    await invoke('plugin:shell|open', { path: config.server_url });
+                }
+            } catch (error) {
+                console.error('❌ 打开网页失败:', error);
+            }
+        }
 
 
 
@@ -728,6 +874,18 @@
                     console.log('🎊 所有监听器注册完成！等待接收消息...');
                     console.log('========================================');
 
+                    // 获取服务器地址用于解析图片相对路径
+                    try {
+                        const { invoke } = window.__TAURI_INTERNALS__;
+                        const config = await invoke('get_config');
+                        if (config && config.server_url) {
+                            serverBaseUrl = config.server_url.replace(/\/+$/, '');
+                            console.log('🌐 服务器地址:', serverBaseUrl);
+                        }
+                    } catch (e) {
+                        console.warn('⚠️ 获取服务器地址失败:', e);
+                    }
+
                     // 在 Tauri API 确认可用后，恢复窗口位置和启动追踪
                     await restoreWindowPosition();
                     await initWindowPositionTracking();
@@ -828,34 +986,58 @@
                 const timeAgo = formatTime(notif.date);
                 const isNew = index === 0 && !notif.pinned && notifications.length > 1;
                 const pinnedClass = notif.pinned ? 'pinned' : '';
+                const expandedClass = notif.expanded ? 'expanded' : '';
 
                 return `
-                    <div class="notification-card priority-${priorityClass} ${pinnedClass}" data-id="${notif.id}">
-                        ${isNew ? '<div class="new-badge">NEW</div>' : ''}
-                        <div class="notification-header">
-                            <div class="notification-title">${escapeHtml(notif.title)}</div>
-                            <div class="notification-time">${timeAgo}</div>
-                        </div>
-                        <div class="notification-message">${escapeHtml(notif.message)}</div>
-                        <div class="notification-meta">
-                            <div>
-                                <span class="priority-badge ${priorityClass}">优先级: ${priorityLabel}</span>
-                                <span style="margin-left: 8px;">ID: ${notif.id}</span>
+                    <div class="notification-card-wrapper" id="notif-wrapper-${notif.id}">
+                        <div class="notification-card priority-${priorityClass} ${pinnedClass} ${expandedClass}" data-id="${notif.id}" onclick="toggleExpand(${notif.id})">
+                            ${isNew ? '<div class="new-badge">NEW</div>' : ''}
+                            <div class="notification-header">
+                                <div class="notification-title">${escapeHtml(notif.title)}</div>
+                                <div class="notification-actions">
+                                    <button class="action-btn" onclick="togglePin(${notif.id}, event)" title="${notif.pinned ? '取消置顶' : '置顶'}">
+                                        ${notif.pinned ? '📍' : '📌'}
+                                    </button>
+                                    <button class="action-btn delete" onclick="deleteNotification(${notif.id}, event)" title="删除">
+                                        ✖️
+                                    </button>
+                                </div>
                             </div>
-                            <div class="notification-actions">
-                                <button class="action-btn" onclick="togglePin(${notif.id}, event)" title="${notif.pinned ? '取消置顶' : '置顶'}">
-                                    ${notif.pinned ? '📍' : '📌'}
-                                </button>
-                                <button class="action-btn delete" onclick="deleteNotification(${notif.id}, event)" title="删除">
-                                    ✖️
-                                </button>
+                            <div class="notification-message" id="msg-${notif.id}">${renderMessage(notif)}</div>
+                            <div class="notification-meta">
+                                <div class="notification-time">${timeAgo}</div>
                             </div>
                         </div>
+                        <button class="read-more-btn" id="read-more-${notif.id}" onclick="toggleExpand(${notif.id})">
+                            ${notif.expanded ? '∧ READ LESS' : '∨ READ MORE'}
+                        </button>
                     </div>
                 `;
             }).join('');
 
             notificationsContainer.innerHTML = html;
+
+            sortedNotifs.forEach(notif => {
+                const msgEl = document.getElementById(`msg-${notif.id}`);
+                const readMoreBtn = document.getElementById(`read-more-${notif.id}`);
+                if (msgEl && readMoreBtn) {
+                    if (msgEl.scrollHeight > 200) {
+                        readMoreBtn.classList.add('visible');
+                    } else if (notif.expanded) {
+                        readMoreBtn.classList.add('visible');
+                    }
+                }
+            });
+        }
+
+        function toggleExpand(id) {
+            // 选中文字时不切换展开状态
+            if (window.getSelection && window.getSelection().toString().length > 0) return;
+            const notif = notifications.find(n => n.id === id);
+            if (notif) {
+                notif.expanded = !notif.expanded;
+                renderNotifications();
+            }
         }
 
         function escapeHtml(text) {
@@ -864,10 +1046,69 @@
             return div.innerHTML;
         }
 
+        // 配置 marked（GitHub Flavored Markdown）
+        marked.setOptions({
+            headerIds: false,
+            mangle: false,
+            breaks: true,
+            gfm: true
+        });
+
+        // 自定义 marked 渲染器来处理链接
+        const renderer = new marked.Renderer();
+        const originalLink = renderer.link.bind(renderer);
+        renderer.link = (href, title, text) => {
+            if (typeof href === 'object') {
+                const { href: linkHref, title: linkTitle, text: linkText } = href;
+                return `<a href="${linkHref}" title="${linkTitle || ''}" onclick="openUrl('${linkHref}', event)">${linkText}</a>`;
+            }
+            return `<a href="${href}" title="${title || ''}" onclick="openUrl('${href}', event)">${text}</a>`;
+        };
+        marked.use({ renderer });
+
+        async function openUrl(url, event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            if (typeof window.__TAURI_INTERNALS__ === 'undefined') {
+                window.open(url, '_blank');
+                return;
+            }
+            try {
+                const { invoke } = window.__TAURI_INTERNALS__;
+                await invoke('plugin:shell|open', { path: url });
+            } catch (error) {
+                console.error('Failed to open URL:', error);
+                window.open(url, '_blank');
+            }
+        }
+
+        function renderMessage(notif) {
+            const text = notif.message;
+            if (!text) return '';
+
+            const isMarkdown = notif.extras &&
+                notif.extras['client::display'] &&
+                notif.extras['client::display'].contentType === 'text/markdown';
+
+            if (isMarkdown) {
+                return marked.parse(notif.message);
+            }
+
+            let html = escapeHtml(notif.message).replace(/\n/g, '<br>');
+            const urlRegex = /(https?:\/\/[^\s]+)/g;
+            html = html.replace(urlRegex, (url) => {
+                return `<a href="${url}" onclick="openUrl('${url}', event)">${url}</a>`;
+            });
+            return html;
+        }
+
         function addNotification(notif) {
             console.log('📨 收到通知:', notif);
             // 添加 pinned 属性，默认为 false
             notif.pinned = false;
+            notif.expanded = false;
             notifications.unshift(notif);
 
             // 只保留最近50条
@@ -898,6 +1139,7 @@
             const index = notifications.findIndex(n => n.id === id);
             if (index !== -1) {
                 notifications.splice(index, 1);
+                renderNotifications();
                 console.log(`🗑️ 通知 ${id} 已删除`);
             }
         }
@@ -1025,6 +1267,16 @@
         window.addEventListener('message', async (event) => {
             if (event.data === 'config-saved') {
                 console.log('📝 配置已保存，重新连接...');
+                // 刷新服务器地址
+                try {
+                    const { invoke } = window.__TAURI_INTERNALS__;
+                    const config = await invoke('get_config');
+                    if (config && config.server_url) {
+                        serverBaseUrl = config.server_url.replace(/\/+$/, '');
+                    }
+                } catch (e) {
+                    console.warn('⚠️ 刷新服务器地址失败:', e);
+                }
                 await reconnectWebSocket();
             }
         });

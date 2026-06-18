@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -194,6 +195,7 @@
         }
     </style>
 </head>
+
 <body>
     <!-- Tauri API 初始化脚本 -->
     <script src="tauri-api.js"></script>
@@ -223,7 +225,7 @@
 
             <div class="form-group">
                 <label for="clientToken">客户端Clients Token</label>
-                <input type="password" id="clientToken" placeholder="输入你的客户端 token" required>
+                <input type="password" id="clientToken" placeholder="输入你的客户端 token(Clients token)" required>
                 <div class="error-message">请输入客户端Clients token</div>
             </div>
 
@@ -311,11 +313,11 @@
 
             try {
                 const { invoke } = window.__TAURI_INTERNALS__;
-                
+
                 // 使用新的 test_connection 命令
-                const result = await invoke('test_connection', { 
-                    serverUrl, 
-                    clientToken 
+                const result = await invoke('test_connection', {
+                    serverUrl,
+                    clientToken
                 });
 
                 console.log('✅ 连接测试成功:', result);
@@ -416,4 +418,5 @@
         });
     </script>
 </body>
+
 </html>

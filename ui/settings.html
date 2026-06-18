@@ -1,10 +1,41 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gotify 设置</title>
     <style>
+        :root {
+            --bg-page: #f5f7fa;
+            --bg-card: #ffffff;
+            --text-primary: #1a1a2e;
+            --text-secondary: #6b7280;
+            --text-tertiary: #9ca3af;
+            --border: #e2e8f0;
+            --input-border: #e5e7eb;
+            --section-bg: #f8fafc;
+            --accent: #4f46e5;
+            --accent-hover: #4338ca;
+            --danger: #ef4444;
+            --success: #10b981;
+        }
+
+        [data-theme="dark"] {
+            --bg-page: #0f1419;
+            --bg-card: #1a1d24;
+            --text-primary: #e5e7eb;
+            --text-secondary: #9ca3af;
+            --text-tertiary: #6b7280;
+            --border: #2d3748;
+            --input-border: #2d3748;
+            --section-bg: #16181d;
+            --accent: #6366f1;
+            --accent-hover: #7c3aed;
+            --danger: #f87171;
+            --success: #34d399;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -13,14 +44,15 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Roboto, sans-serif;
-            background: #f5f7fa;
+            background: var(--bg-page);
             padding: 20px;
+            color: var(--text-primary);
         }
 
         .container {
             max-width: 400px;
             margin: 0 auto;
-            background: white;
+            background: var(--bg-card);
             border-radius: 12px;
             padding: 24px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
@@ -32,14 +64,14 @@
         }
 
         .header h1 {
-            color: #1a1a2e;
+            color: var(--text-primary);
             font-size: 20px;
             font-weight: 600;
             margin-bottom: 8px;
         }
 
         .header p {
-            color: #6b7280;
+            color: var(--text-secondary);
             font-size: 14px;
         }
 
@@ -50,7 +82,7 @@
         .form-group label {
             display: block;
             margin-bottom: 6px;
-            color: #374151;
+            color: var(--text-primary);
             font-weight: 500;
             font-size: 14px;
         }
@@ -58,25 +90,26 @@
         .form-group input {
             width: 100%;
             padding: 12px;
-            border: 2px solid #e5e7eb;
+            border: 2px solid var(--input-border);
             border-radius: 8px;
             font-size: 14px;
             transition: border-color 0.2s ease;
-            background: white;
+            background: var(--bg-card);
+            color: var(--text-primary);
         }
 
         .form-group input:focus {
             outline: none;
-            border-color: #4f46e5;
+            border-color: var(--accent);
             box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
         }
 
         .form-group input.error {
-            border-color: #ef4444;
+            border-color: var(--danger);
         }
 
         .error-message {
-            color: #ef4444;
+            color: var(--danger);
             font-size: 12px;
             margin-top: 4px;
             display: none;
@@ -104,27 +137,27 @@
         }
 
         .btn-primary {
-            background: #4f46e5;
+            background: var(--accent);
             color: white;
         }
 
         .btn-primary:hover {
-            background: #4338ca;
+            background: var(--accent-hover);
         }
 
         .btn-primary:disabled {
-            background: #9ca3af;
+            background: var(--text-tertiary);
             cursor: not-allowed;
         }
 
         .btn-secondary {
-            background: #f3f4f6;
-            color: #374151;
-            border: 1px solid #d1d5db;
+            background: var(--section-bg);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
         }
 
         .btn-secondary:hover {
-            background: #e5e7eb;
+            background: var(--input-border);
         }
 
         .status {
@@ -156,15 +189,15 @@
         }
 
         .connection-test {
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
+            background: var(--section-bg);
+            border: 1px solid var(--border);
             border-radius: 8px;
             padding: 12px;
             margin-bottom: 16px;
         }
 
         .connection-test h3 {
-            color: #374151;
+            color: var(--text-primary);
             font-size: 14px;
             font-weight: 600;
             margin-bottom: 8px;
@@ -175,25 +208,91 @@
             align-items: center;
             gap: 8px;
             font-size: 13px;
-            color: #6b7280;
+            color: var(--text-secondary);
         }
 
         .status-dot {
             width: 8px;
             height: 8px;
             border-radius: 50%;
-            background: #9ca3af;
+            background: var(--text-tertiary);
         }
 
         .status-dot.connected {
-            background: #10b981;
+            background: var(--success);
         }
 
         .status-dot.disconnected {
-            background: #ef4444;
+            background: var(--danger);
+        }
+
+        /* 开关样式 */
+        .toggle-group {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px;
+            background: var(--section-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-top: 16px;
+        }
+
+        .toggle-group label {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+            cursor: pointer;
+        }
+
+        .toggle-group .toggle-desc {
+            font-size: 12px;
+            color: var(--text-tertiary);
+            margin-top: 2px;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            flex-shrink: 0;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #d1d5db;
+            border-radius: 24px;
+            transition: 0.3s;
+        }
+
+        .toggle-slider::before {
+            content: '';
+            position: absolute;
+            width: 20px; height: 20px;
+            left: 2px; bottom: 2px;
+            background: white;
+            border-radius: 50%;
+            transition: 0.3s;
+        }
+
+        .toggle-switch input:checked + .toggle-slider {
+            background: var(--accent);
+        }
+
+        .toggle-switch input:checked + .toggle-slider::before {
+            transform: translateX(20px);
         }
     </style>
 </head>
+
 <body>
     <!-- Tauri API 初始化脚本 -->
     <script src="tauri-api.js"></script>
@@ -222,9 +321,9 @@
             </div>
 
             <div class="form-group">
-                <label for="clientToken">客户端 Token</label>
-                <input type="password" id="clientToken" placeholder="输入你的客户端 token" required>
-                <div class="error-message">请输入客户端 token</div>
+                <label for="clientToken">客户端Token(Clients token)</label>
+                <input type="password" id="clientToken" placeholder="输入你的客户端 token(Clients token)" required>
+                <div class="error-message">请输入客户端 token(Clients token)</div>
             </div>
 
             <div class="button-group">
@@ -232,6 +331,17 @@
                 <button type="submit" class="btn btn-primary">保存设置</button>
             </div>
         </form>
+
+        <div class="toggle-group">
+            <div>
+                <label for="autoLaunch">开机自启动</label>
+                <div class="toggle-desc">登录 Mac 时自动启动 Gotify</div>
+            </div>
+            <label class="toggle-switch">
+                <input type="checkbox" id="autoLaunch" onchange="toggleAutoLaunch(this.checked)">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
     </div>
 
     <script>
@@ -245,6 +355,9 @@
             }
 
             try {
+                // 同步主题
+                await syncTheme();
+
                 const { invoke } = window.__TAURI_INTERNALS__;
 
                 // 获取当前配置
@@ -254,7 +367,14 @@
                 if (config) {
                     document.getElementById('serverUrl').value = config.server_url;
                     document.getElementById('clientToken').value = config.client_token;
-                    updateConnectionStatus(false); // 初始状态为未连接
+                }
+
+                // 检查实际的 WebSocket 连接状态
+                try {
+                    const isRunning = await invoke('is_websocket_running');
+                    updateConnectionStatus(isRunning);
+                } catch {
+                    updateConnectionStatus(false);
                 }
             } catch (error) {
                 console.error('获取配置失败:', error);
@@ -311,11 +431,11 @@
 
             try {
                 const { invoke } = window.__TAURI_INTERNALS__;
-                
+
                 // 使用新的 test_connection 命令
-                const result = await invoke('test_connection', { 
-                    serverUrl, 
-                    clientToken 
+                const result = await invoke('test_connection', {
+                    serverUrl,
+                    clientToken
                 });
 
                 console.log('✅ 连接测试成功:', result);
@@ -402,9 +522,60 @@
             await saveSettings();
         });
 
+        // 加载开机启动状态
+        async function loadAutoLaunch() {
+            if (typeof window.__TAURI_INTERNALS__ === 'undefined') return;
+            try {
+                const { invoke } = window.__TAURI_INTERNALS__;
+                const enabled = await invoke('get_auto_launch');
+                document.getElementById('autoLaunch').checked = enabled;
+            } catch (error) {
+                console.error('获取开机启动状态失败:', error);
+            }
+        }
+
+        // 切换开机启动
+        async function toggleAutoLaunch(enabled) {
+            if (typeof window.__TAURI_INTERNALS__ === 'undefined') return;
+            try {
+                const { invoke } = window.__TAURI_INTERNALS__;
+                await invoke('set_auto_launch', { enabled });
+                showStatus(enabled ? '已开启开机自启动' : '已关闭开机自启动', 'success');
+            } catch (error) {
+                console.error('设置开机启动失败:', error);
+                showStatus('设置开机启动失败: ' + error, 'error');
+                document.getElementById('autoLaunch').checked = !enabled;
+            }
+        }
+
+        // 同步主题
+        async function syncTheme() {
+            if (typeof window.__TAURI_INTERNALS__ === 'undefined') return;
+            try {
+                const { invoke } = window.__TAURI_INTERNALS__;
+                const theme = await invoke('get_system_theme');
+                document.documentElement.setAttribute('data-theme', theme);
+            } catch {
+                // 忽略
+            }
+        }
+
+        // 监听连接状态事件
+        function listenConnectionStatus() {
+            if (typeof window.__TAURI_INTERNALS__ === 'undefined') return;
+            const { listen } = window.__TAURI_INTERNALS__;
+            if (listen) {
+                listen('websocket-status', (event) => {
+                    updateConnectionStatus(event.payload === 'connected');
+                });
+            }
+        }
+
         // 页面加载完成后初始化
         document.addEventListener('DOMContentLoaded', () => {
             initSettings();
+            loadAutoLaunch();
+            listenConnectionStatus();
         });
 
         // 监听来自主窗口的消息
@@ -416,4 +587,5 @@
         });
     </script>
 </body>
+
 </html>
