@@ -46,6 +46,22 @@ const translations = {
         'autoLaunch': '开机自启动',
         'autoLaunchDesc': '登录 Mac 时自动启动 Gotify',
 
+        // 声音设置
+        'soundSettings': '声音设置',
+        'enableSound': '开启通知声音',
+        'enableSoundDesc': '收到 Gotify 通知时播放提示音',
+        'soundThreshold': '声音触发门槛',
+        'soundThresholdDesc': '仅当通知优先级达到该值时播放声音',
+        'allPriorities': '所有通知 (优先级 >= 0)',
+        'mediumHighPriorities': '中高优先级 (优先级 >= 5)',
+        'highOnly': '仅高优先级 (优先级 >= 8)',
+        'testSound': '测试声音',
+
+        // 连接状态
+        'connecting': '正在连接...',
+        'reconnecting': '断开重连中...',
+        'reconnect': '立即重连',
+
         // 状态消息
         'fillServerInfo': '请填写完整的服务器信息',
         'testingConnection': '正在测试连接...',
@@ -104,6 +120,22 @@ const translations = {
         'showInDockEnabled': 'Now showing in Dock',
         'showInDockDisabled': 'Now hidden from Dock',
         'showInDockFailed': 'Failed to toggle Dock visibility',
+
+        // Sound settings
+        'soundSettings': 'Sound Settings',
+        'enableSound': 'Notification Sound',
+        'enableSoundDesc': 'Play sound when receiving notifications',
+        'soundThreshold': 'Sound Priority Threshold',
+        'soundThresholdDesc': 'Only play sound for notifications with this priority',
+        'allPriorities': 'All Notifications (>= 0)',
+        'mediumHighPriorities': 'Medium & High (>= 5)',
+        'highOnly': 'High Only (>= 8)',
+        'testSound': 'Test Sound',
+
+        // Connection status
+        'connecting': 'Connecting...',
+        'reconnecting': 'Reconnecting...',
+        'reconnect': 'Reconnect Now',
 
         // Status messages
         'fillServerInfo': 'Please fill in all server information',

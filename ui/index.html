@@ -500,6 +500,47 @@
             -ms-overflow-style: none;
             scrollbar-width: none;
         }
+
+        /* 掉线/重连提示条 */
+        .connection-banner {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: 500;
+            border-bottom: 1px solid #fca5a5;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 900;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .connection-banner.connecting {
+            background: #feefc3;
+            color: #713f12;
+            border-bottom: 1px solid #fde047;
+        }
+
+        .connection-banner.hidden {
+            display: none !important;
+        }
+
+        .reconnect-btn {
+            background: rgba(0, 0, 0, 0.08);
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+            color: inherit;
+        }
+
+        .reconnect-btn:hover {
+            background: rgba(0, 0, 0, 0.15);
+        }
     </style>
 </head>
 
@@ -518,6 +559,12 @@
 
 
     <div class="container">
+        <!-- 掉线/重连状态栏 -->
+        <div id="connectionBanner" class="connection-banner hidden">
+            <span id="bannerText">⚠️ 未连接到 Gotify 服务器</span>
+            <button class="reconnect-btn" onclick="reconnectWebSocket()" data-i18n="reconnect">立即重连</button>
+        </div>
+
         <div id="notifications" class="notifications-container">
             <div class="empty-state">
                 <div class="empty-state-icon">📭</div>
@@ -877,6 +924,27 @@
                     });
                     console.log('✅ show-settings 监听器注册成功！');
 
+                    // 注册 websocket-status 监听器
+                    console.log('正在注册 websocket-status 监听器...');
+                    const unlistenStatus = await listen('websocket-status', (event) => {
+                        console.log('🔔 收到 websocket-status 事件:', event.payload);
+                        updateConnectionBanner(event.payload);
+                    });
+                    console.log('✅ websocket-status 监听器注册成功！');
+
+                    // 检查初始 WebSocket 状态
+                    try {
+                        const { invoke } = window.__TAURI_INTERNALS__;
+                        const isRunning = await invoke('is_websocket_running');
+                        if (isRunning) {
+                            updateConnectionBanner('connected');
+                        } else {
+                            updateConnectionBanner('disconnected');
+                        }
+                    } catch (e) {
+                        console.warn('⚠️ 检查初始 WebSocket 状态失败:', e);
+                    }
+
                     console.log('========================================');
                     console.log('🎊 所有监听器注册完成！等待接收消息...');
                     console.log('========================================');
@@ -1111,6 +1179,57 @@
             return html;
         }
 
+        function updateConnectionBanner(status) {
+            const banner = document.getElementById('connectionBanner');
+            const textEl = document.getElementById('bannerText');
+            if (!banner || !textEl) return;
+
+            if (status === 'connected') {
+                banner.classList.add('hidden');
+            } else if (status === 'connecting') {
+                banner.className = 'connection-banner connecting';
+                textEl.textContent = '⏳ ' + t('connecting');
+            } else if (status === 'reconnecting') {
+                banner.className = 'connection-banner connecting';
+                textEl.textContent = '🔄 ' + t('reconnecting');
+            } else {
+                banner.className = 'connection-banner';
+                textEl.textContent = '⚠️ ' + t('disconnected');
+            }
+        }
+
+        function playChimeSound() {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const now = audioCtx.currentTime;
+
+                const osc1 = audioCtx.createOscillator();
+                const gain1 = audioCtx.createGain();
+                osc1.type = 'sine';
+                osc1.frequency.setValueAtTime(587.33, now);
+                osc1.frequency.exponentialRampToValueAtTime(880, now + 0.1);
+                gain1.gain.setValueAtTime(0.25, now);
+                gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+                osc1.connect(gain1);
+                gain1.connect(audioCtx.destination);
+                osc1.start(now);
+                osc1.stop(now + 0.4);
+
+                const osc2 = audioCtx.createOscillator();
+                const gain2 = audioCtx.createGain();
+                osc2.type = 'sine';
+                osc2.frequency.setValueAtTime(880, now + 0.12);
+                gain2.gain.setValueAtTime(0.35, now + 0.12);
+                gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+                osc2.connect(gain2);
+                gain2.connect(audioCtx.destination);
+                osc2.start(now + 0.12);
+                osc2.stop(now + 0.5);
+            } catch (e) {
+                console.error('播放音效失败:', e);
+            }
+        }
+
         function addNotification(notif) {
             console.log('📨 收到通知:', notif);
             // 添加 pinned 属性，默认为 false
@@ -1125,8 +1244,10 @@
 
             renderNotifications();
 
-            // 播放声音（可选）
-            // new Audio('notification.mp3').play();
+            // 播放声音提示音
+            if (notif.should_play_sound !== false) {
+                playChimeSound();
+            }
         }
 
         // 置顶/取消置顶通知

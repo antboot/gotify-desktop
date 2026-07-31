@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager, State};
 use tauri::tray::{TrayIconBuilder, TrayIcon};
-use futures_util::StreamExt;
+use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use image::GenericImageView;
 use std::collections::HashMap;
@@ -23,6 +23,50 @@ struct ConnectionConfig {
     server_url: String,
     client_token: String,
 }
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+struct SoundConfig {
+    sound_enabled: bool,
+    min_priority: u32,
+}
+
+impl Default for SoundConfig {
+    fn default() -> Self {
+        SoundConfig {
+            sound_enabled: true,
+            min_priority: 0,
+        }
+    }
+}
+
+fn load_sound_config_from_file() -> SoundConfig {
+    let config_dir = get_config_dir();
+    let config_path = format!("{}/.gotify_sound_config.json", config_dir);
+    if let Ok(content) = std::fs::read_to_string(&config_path) {
+        if let Ok(config) = serde_json::from_str::<SoundConfig>(&content) {
+            return config;
+        }
+    }
+    SoundConfig::default()
+}
+
+#[tauri::command]
+fn get_sound_config() -> SoundConfig {
+    load_sound_config_from_file()
+}
+
+#[tauri::command]
+fn save_sound_config(sound_enabled: bool, min_priority: u32) -> Result<(), String> {
+    let config = SoundConfig {
+        sound_enabled,
+        min_priority,
+    };
+    let config_dir = get_config_dir();
+    let config_path = format!("{}/.gotify_sound_config.json", config_dir);
+    std::fs::write(&config_path, serde_json::to_string_pretty(&config).unwrap())
+        .map_err(|e| format!("保存声音设置失败: {}", e))
+}
+
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 struct WindowPosition {
@@ -455,94 +499,138 @@ async fn run_websocket(
         format!("{}{}/stream?token={}", protocol, host, config.client_token)
     };
 
-    println!("Connecting to: {}", ws_url);
-
+    println!("Connecting to WebSocket: {}", ws_url);
     let url = url::Url::parse(&ws_url)?;
-    let (ws_stream, _) = connect_async(url).await?;
-    println!("WebSocket connected successfully");
 
-    let (_write, mut read) = ws_stream.split();
-
-    // 发送连接成功消息到前端
-    println!("📤 发送连接状态到前端...");
-    match app.emit("websocket-status", "connected") {
-        Ok(_) => println!("✅ websocket-status 已推送"),
-        Err(e) => eprintln!("❌ websocket-status 推送失败: {}", e),
-    }
+    let mut reconnect_attempt = 0u32;
 
     while *ws_running.lock().unwrap() {
-        tokio::select! {
-            msg = read.next() => {
-                match msg {
-                    Some(Ok(Message::Text(text))) => {
-                        println!("Received message: {}", text);
-                        
-                        // 解析 Gotify 消息
-                        if let Ok(gotify_msg) = serde_json::from_str::<GotifyMessage>(&text) {
-                            println!("📨 收到 Gotify 消息:");
-                            println!("   标题: {}", gotify_msg.title);
-                            println!("   内容: {}", gotify_msg.message);
-                            println!("   优先级: {}", gotify_msg.priority);
-                            
-                            // 发送 macOS 系统通知
-                            use tauri_plugin_notification::NotificationExt;
-                            
-                            println!("🔔 准备发送系统通知...");
-                            println!("   标题: {}", gotify_msg.title);
-                            println!("   优先级: {}", gotify_msg.priority);
-                            
-                            // 构建通知
-                            let mut notification = app.notification().builder();
-                            notification = notification
-                                .title(&gotify_msg.title)
-                                .body(&gotify_msg.message);
-                            
-                            // 高优先级消息添加声音
-                            if gotify_msg.priority >= 5 {
-                                println!("   添加默认系统声音");
-                                notification = notification.sound("default");
+        if reconnect_attempt > 0 {
+            println!("🔄 尝试重连中 (第 {} 次)...", reconnect_attempt);
+            let _ = app.emit("websocket-status", "reconnecting");
+        } else {
+            println!("🔌 正在建立 WebSocket 连接...");
+            let _ = app.emit("websocket-status", "connecting");
+        }
+
+        match connect_async(url.clone()).await {
+            Ok((ws_stream, _)) => {
+                println!("✅ WebSocket 连接建立成功");
+                reconnect_attempt = 0;
+                let _ = app.emit("websocket-status", "connected");
+
+                let (mut write, mut read) = ws_stream.split();
+                let mut ping_interval = tokio::time::interval(std::time::Duration::from_secs(15));
+                ping_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+                loop {
+                    if !*ws_running.lock().unwrap() {
+                        println!("⏹️ 收到停止 WebSocket 指令");
+                        break;
+                    }
+
+                    tokio::select! {
+                        _ = ping_interval.tick() => {
+                            if let Err(e) = write.send(Message::Ping(vec![])).await {
+                                eprintln!("⚠️ 发送 Ping 失败: {}, 准备重连", e);
+                                break;
                             }
-                            
-                            match notification.show() {
-                                Ok(_) => println!("✅ macOS 系统通知已成功发送"),
-                                Err(e) => eprintln!("❌ 发送通知失败: {:?}", e),
-                            }
-                            
-                            // 发送消息到前端
-                            println!("📤 发送消息到前端...");
-                            
-                            // 发送到前端 - 使用 emit_to 指定目标窗口
-                            if let Some(window) = app.get_webview_window("main") {
-                                match window.emit("gotify-message", &gotify_msg) {
-                                    Ok(_) => println!("✅ 消息已推送到前端"),
-                                    Err(e) => eprintln!("❌ 推送失败: {}", e),
+                        }
+                        msg = tokio::time::timeout(std::time::Duration::from_secs(45), read.next()) => {
+                            match msg {
+                                Ok(Some(Ok(Message::Text(text)))) => {
+                                    println!("Received message: {}", text);
+
+                                    // 解析 Gotify 消息
+                                    if let Ok(gotify_msg) = serde_json::from_str::<GotifyMessage>(&text) {
+                                        println!("📨 收到 Gotify 消息: {} (priority={})", gotify_msg.title, gotify_msg.priority);
+
+                                        let sound_cfg = load_sound_config_from_file();
+                                        let should_sound = sound_cfg.sound_enabled && gotify_msg.priority >= sound_cfg.min_priority;
+
+                                        // 发送 macOS / 系统通知
+                                        use tauri_plugin_notification::NotificationExt;
+
+                                        let mut notification = app.notification().builder();
+                                        notification = notification
+                                            .title(&gotify_msg.title)
+                                            .body(&gotify_msg.message);
+
+                                        if should_sound {
+                                            println!("🔔 为通知添加默认系统声音");
+                                            notification = notification.sound("default");
+                                        }
+
+                                        match notification.show() {
+                                            Ok(_) => println!("✅ 系统通知已生成"),
+                                            Err(e) => eprintln!("❌ 发送通知失败: {:?}", e),
+                                        }
+
+                                        // 发送消息到前端主窗口
+                                        if let Some(window) = app.get_webview_window("main") {
+                                            let mut payload = serde_json::to_value(&gotify_msg).unwrap_or_default();
+                                            if let Some(obj) = payload.as_object_mut() {
+                                                obj.insert("should_play_sound".to_string(), serde_json::Value::Bool(should_sound));
+                                            }
+                                            match window.emit("gotify-message", &payload) {
+                                                Ok(_) => println!("✅ 消息已推送到前端"),
+                                                Err(e) => eprintln!("❌ 推送失败: {}", e),
+                                            }
+                                        } else {
+                                            eprintln!("❌ 无法找到主窗口");
+                                        }
+                                    }
                                 }
-                            } else {
-                                eprintln!("❌ 无法找到主窗口");
+                                Ok(Some(Ok(Message::Ping(_)))) => {
+                                    // 自动回复 pong（tokio-tungstenite 内部处理或此标记）
+                                }
+                                Ok(Some(Ok(Message::Pong(_)))) => {
+                                    // 收到服务器 pong
+                                }
+                                Ok(Some(Ok(Message::Close(_)))) => {
+                                    println!("⚠️ WebSocket 服务器主动关闭连接");
+                                    break;
+                                }
+                                Ok(Some(Err(e))) => {
+                                    eprintln!("⚠️ WebSocket 读取异常: {}", e);
+                                    break;
+                                }
+                                Ok(None) => {
+                                    println!("⚠️ WebSocket 数据流结束");
+                                    break;
+                                }
+                                Err(_) => {
+                                    eprintln!("⚠️ 45 秒内未收到响应或心跳，判定连接断开");
+                                    break;
+                                }
+                                _ => {}
                             }
                         }
                     }
-                    Some(Ok(Message::Close(_))) => {
-                        println!("WebSocket closed");
-                        break;
-                    }
-                    Some(Err(e)) => {
-                        eprintln!("WebSocket error: {}", e);
-                        break;
-                    }
-                    None => {
-                        println!("WebSocket stream ended");
-                        break;
-                    }
-                    _ => {}
                 }
             }
+            Err(e) => {
+                eprintln!("❌ WebSocket 连接尝试失败: {}", e);
+            }
         }
+
+        // 如果用户主动点击了停止连接，则跳出重连循环
+        if !*ws_running.lock().unwrap() {
+            break;
+        }
+
+        reconnect_attempt += 1;
+        // 指数退避重连等待时间：2s, 4s, 8s, 16s, 最大 30s
+        let delay_secs = std::cmp::min(1u64 << reconnect_attempt.min(5), 30);
+        let _ = app.emit("websocket-status", "reconnecting");
+        println!("⏳ {} 秒后尝试重新连接...", delay_secs);
+        tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
     }
 
-    app.emit("websocket-status", "disconnected").ok();
+    let _ = app.emit("websocket-status", "disconnected");
     let mut running = ws_running.lock().unwrap();
     *running = false;
+    println!("🛑 WebSocket 异步运行任务已终止");
 
     Ok(())
 }
@@ -751,6 +839,8 @@ pub fn run() {
             set_auto_launch,
             get_show_in_dock,
             set_show_in_dock,
+            get_sound_config,
+            save_sound_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -889,7 +979,7 @@ fn set_show_in_dock(app: tauri::AppHandle, enabled: bool) -> Result<(), String> 
         } else {
             tauri::ActivationPolicy::Accessory
         };
-        app.set_activation_policy(policy);
+        let _ = app.set_activation_policy(policy);
     }
 
     Ok(())

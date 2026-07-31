@@ -397,6 +397,35 @@
                 </label>
             </div>
         </div>
+
+        <!-- 声音设置 -->
+        <div class="settings-section">
+            <div class="settings-section-title" data-i18n="soundSettings">声音设置</div>
+
+            <div class="toggle-group">
+                <div>
+                    <label for="soundEnabled" data-i18n="enableSound">开启通知声音</label>
+                    <div class="toggle-desc" data-i18n="enableSoundDesc">收到 Gotify 通知时播放提示音</div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="soundEnabled" onchange="saveSoundSettings()">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+
+            <div class="form-group" style="margin-top: 10px;">
+                <label for="minPriority" data-i18n="soundThreshold">声音触发门槛</label>
+                <select id="minPriority" onchange="saveSoundSettings()" style="width: 100%; padding: 8px; border: 2px solid var(--input-border); border-radius: 8px; background: var(--bg-card); color: var(--text-primary); font-size: 13px;">
+                    <option value="0" data-i18n="allPriorities">所有通知 (优先级 >= 0)</option>
+                    <option value="5" data-i18n="mediumHighPriorities">中高优先级 (优先级 >= 5)</option>
+                    <option value="8" data-i18n="highOnly">仅高优先级 (优先级 >= 8)</option>
+                </select>
+            </div>
+
+            <div class="button-group" style="margin-top: 10px;">
+                <button type="button" class="btn btn-secondary" onclick="testNotificationSound()" data-i18n="testSound">🔊 测试声音</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -656,12 +685,78 @@
             }
         }
 
+        // 加载声音设置
+        async function loadSoundSettings() {
+            if (typeof window.__TAURI_INTERNALS__ === 'undefined') return;
+            try {
+                const { invoke } = window.__TAURI_INTERNALS__;
+                const soundConfig = await invoke('get_sound_config');
+                if (soundConfig) {
+                    document.getElementById('soundEnabled').checked = soundConfig.sound_enabled;
+                    document.getElementById('minPriority').value = soundConfig.min_priority || 0;
+                }
+            } catch (error) {
+                console.error('加载声音设置失败:', error);
+            }
+        }
+
+        // 保存声音设置
+        async function saveSoundSettings() {
+            if (typeof window.__TAURI_INTERNALS__ === 'undefined') return;
+            const soundEnabled = document.getElementById('soundEnabled').checked;
+            const minPriority = parseInt(document.getElementById('minPriority').value, 10) || 0;
+            try {
+                const { invoke } = window.__TAURI_INTERNALS__;
+                await invoke('save_sound_config', { soundEnabled, minPriority });
+                showStatus(t('settingsSaved'), 'success');
+            } catch (error) {
+                console.error('保存声音设置失败:', error);
+                showStatus(t('settingsSaveFailed'), 'error');
+            }
+        }
+
+        // 测试通知声音
+        function testNotificationSound() {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const now = audioCtx.currentTime;
+
+                const osc1 = audioCtx.createOscillator();
+                const gain1 = audioCtx.createGain();
+                osc1.type = 'sine';
+                osc1.frequency.setValueAtTime(587.33, now);
+                osc1.frequency.exponentialRampToValueAtTime(880, now + 0.1);
+                gain1.gain.setValueAtTime(0.3, now);
+                gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+                osc1.connect(gain1);
+                gain1.connect(audioCtx.destination);
+                osc1.start(now);
+                osc1.stop(now + 0.4);
+
+                const osc2 = audioCtx.createOscillator();
+                const gain2 = audioCtx.createGain();
+                osc2.type = 'sine';
+                osc2.frequency.setValueAtTime(880, now + 0.12);
+                gain2.gain.setValueAtTime(0.4, now + 0.12);
+                gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+                osc2.connect(gain2);
+                gain2.connect(audioCtx.destination);
+                osc2.start(now + 0.12);
+                osc2.stop(now + 0.5);
+
+                showStatus('🔊 音效测试播放成功', 'success');
+            } catch (e) {
+                console.error('播放音效失败:', e);
+            }
+        }
+
         // 页面加载完成后初始化
         document.addEventListener('DOMContentLoaded', () => {
             updateTranslations();
             initSettings();
             loadAutoLaunch();
             loadShowInDock();
+            loadSoundSettings();
             listenConnectionStatus();
         });
 
