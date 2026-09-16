@@ -7,6 +7,151 @@ use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use image::GenericImageView;
 use std::collections::HashMap;
 
+// ── macOS: Override constrainFrameRect safely on tao's existing per-window class ──
+// tao creates a unique NSWindow subclass per window. We add constrainFrameRect to THAT
+// existing class via class_addMethod — NO object_setClass, NO isa change.
+// This prevents Stage Manager from pushing the window away from x=0.
+#[cfg(target_os = "macos")]
+mod macos_window {
+    use std::ffi::{c_char, c_void};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    // The pointer of the window we want to override, so our constrainFrameRect
+    // implementation can return early for other windows (if any exist).
+    static FLOATING_WIN_PTR: AtomicUsize = AtomicUsize::new(0);
+
+    #[link(name = "objc", kind = "dylib")]
+    extern "C" {
+        fn sel_registerName(name: *const c_char) -> *mut c_void;
+        fn object_getClass(obj: *mut c_void) -> *mut c_void;
+        fn class_addMethod(
+            cls: *mut c_void,
+            name: *mut c_void,
+            imp: unsafe extern "C" fn(),
+            types: *const c_char,
+        ) -> bool;
+        fn class_getInstanceMethod(cls: *mut c_void, sel: *mut c_void) -> *mut c_void;
+        fn method_setImplementation(method: *mut c_void, imp: unsafe extern "C" fn()) -> unsafe extern "C" fn();
+        fn objc_msgSend();
+    }
+
+    extern "C" {
+        static _dispatch_main_q: c_void;
+        fn dispatch_async_f(
+            queue: *const c_void,
+            context: *mut c_void,
+            work: unsafe extern "C" fn(*mut c_void),
+        );
+    }
+
+    #[repr(C)]
+    #[derive(Copy, Clone)]
+    struct CGPoint { x: f64, y: f64 }
+    #[repr(C)]
+    #[derive(Copy, Clone)]
+    struct CGSize  { width: f64, height: f64 }
+    #[repr(C)]
+    #[derive(Copy, Clone)]
+    struct CGRect  { origin: CGPoint, size: CGSize }
+
+    /// Our constrainFrameRect override: removes x constraint, keeps y clamped to screen.
+    unsafe extern "C" fn custom_constrain(
+        _self: *mut c_void,
+        _cmd:  *mut c_void,
+        mut r: CGRect,
+        screen: *mut c_void,
+    ) -> CGRect {
+        // Only override for the pinned Gotify window.
+        if _self != FLOATING_WIN_PTR.load(Ordering::Relaxed) as *mut c_void {
+            // For any other window: just return frame unchanged (safe fallback).
+            return r;
+        }
+        if !screen.is_null() {
+            let frame_sel = sel_registerName(b"frame\0".as_ptr() as _);
+            let msg: unsafe extern "C" fn(*mut c_void, *mut c_void) -> CGRect =
+                std::mem::transmute(objc_msgSend as *const ());
+            let sf = msg(screen, frame_sel);
+            // Clamp y so window doesn't go above top of screen or below bottom.
+            let max_y = sf.origin.y + sf.size.height;
+            if r.origin.y + r.size.height > max_y {
+                r.origin.y = max_y - r.size.height;
+            }
+            if r.origin.y < sf.origin.y {
+                r.origin.y = sf.origin.y;
+            }
+            // x is intentionally NOT constrained.
+        }
+        r
+    }
+
+    unsafe fn msg_isize(obj: *mut c_void, sel: *mut c_void, val: isize) {
+        let f: unsafe extern "C" fn(*mut c_void, *mut c_void, isize) =
+            std::mem::transmute(objc_msgSend as *const ());
+        f(obj, sel, val);
+    }
+    unsafe fn msg_usize(obj: *mut c_void, sel: *mut c_void, val: usize) {
+        let f: unsafe extern "C" fn(*mut c_void, *mut c_void, usize) =
+            std::mem::transmute(objc_msgSend as *const ());
+        f(obj, sel, val);
+    }
+
+    struct FloatCtx { ns_window: *mut c_void, enable: bool }
+    unsafe impl Send for FloatCtx {}
+
+    unsafe extern "C" fn do_set_floating(ctx: *mut c_void) {
+        let boxed = Box::from_raw(ctx as *mut FloatCtx);
+        let win = boxed.ns_window;
+        if win.is_null() { return; }
+
+        let level_sel    = sel_registerName(b"setLevel:\0".as_ptr() as _);
+        let behavior_sel = sel_registerName(b"setCollectionBehavior:\0".as_ptr() as _);
+        let constrain_sel = sel_registerName(b"constrainFrameRect:toScreen:\0".as_ptr() as _);
+        let types = b"{CGRect={CGPoint=dd}{CGSize=dd}}@:{CGRect={CGPoint=dd}{CGSize=dd}}@\0"
+            .as_ptr() as *const c_char;
+        let imp_fn: unsafe extern "C" fn() = std::mem::transmute(custom_constrain as *const ());
+
+        if boxed.enable {
+            // Store window pointer so custom_constrain knows which window to override.
+            FLOATING_WIN_PTR.store(win as usize, Ordering::Relaxed);
+
+            // Add constrainFrameRect to the window's existing class (tao's per-window subclass).
+            // class_addMethod only succeeds if the method is NOT already in this exact class
+            // (it's OK if it's in a superclass — that's what we want to override).
+            let cls = object_getClass(win);
+            let added = class_addMethod(cls, constrain_sel, imp_fn, types);
+            if !added {
+                // Method was already added on a previous toggle — replace its implementation.
+                let m = class_getInstanceMethod(cls, constrain_sel);
+                if !m.is_null() {
+                    method_setImplementation(m, imp_fn);
+                }
+            }
+
+            // NSFloatingWindowLevel = 3 (float above all apps)
+            msg_isize(win, level_sel, 3);
+            // NSWindowCollectionBehaviorCanJoinAllApplications (262144) = Stage Manager ignores management
+            // NSWindowCollectionBehaviorStationary (16)                 = don't move when spaces change
+            // NSWindowCollectionBehaviorCanJoinAllSpaces (1)
+            // NSWindowCollectionBehaviorFullScreenAuxiliary (256)
+            // NSWindowCollectionBehaviorIgnoresCycle (64)
+            msg_usize(win, behavior_sel, 262144 | 256 | 64 | 16 | 1);
+        } else {
+            FLOATING_WIN_PTR.store(0, Ordering::Relaxed);
+            msg_isize(win, level_sel, 0);
+            msg_usize(win, behavior_sel, 0);
+        }
+    }
+
+    pub fn schedule_set_floating(ns_window: *mut c_void, enable: bool) {
+        if ns_window.is_null() { return; }
+        let ctx = Box::into_raw(Box::new(FloatCtx { ns_window, enable }));
+        unsafe {
+            dispatch_async_f(&_dispatch_main_q, ctx as *mut c_void, do_set_floating);
+        }
+    }
+}
+
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 struct GotifyMessage {
     id: u64,
@@ -334,11 +479,28 @@ async fn test_connection(
         }
         Ok(Err(e)) => {
             eprintln!("❌ WebSocket 连接失败: {}", e);
-            Err(format!("连接失败: {}。请检查服务器地址和 Token 是否正确", e))
+            let err_str = e.to_string();
+            // 将常见系统网络错误翻译成友好提示
+            let friendly = if err_str.contains("os error 65") || err_str.contains("No route to host") {
+                "网络不可达（No route to host）。请检查：\n① 服务器是否开机/在线\n② 本机与服务器的网络是否连通".to_string()
+            } else if err_str.contains("os error 61") || err_str.contains("Connection refused") {
+                "连接被拒绝（Connection refused）。请检查：\n① Gotify 服务器进程是否运行\n② 端口号是否正确".to_string()
+            } else if err_str.contains("os error 60") || err_str.contains("Operation timed out") {
+                "连接超时，服务器未响应。请检查服务器地址是否可访问".to_string()
+            } else if err_str.contains("os error 50") || err_str.contains("Network is down") {
+                "本机网络已断开，请检查 Wi-Fi 或网线连接".to_string()
+            } else if err_str.contains("401") || err_str.contains("Unauthorized") {
+                "认证失败（401）。请检查客户端 Token 是否正确".to_string()
+            } else if err_str.contains("DNS") || err_str.contains("failed to lookup") {
+                "DNS 解析失败，无法找到服务器。请检查服务器地址".to_string()
+            } else {
+                format!("连接失败: {}。\n请检查服务器地址和 Token 是否正确", e)
+            };
+            Err(friendly)
         }
         Err(_) => {
             eprintln!("❌ 连接超时");
-            Err("连接超时，请检查服务器地址是否可访问".to_string())
+            Err("连接超时（10秒），服务器未响应。请检查服务器地址是否可访问".to_string())
         }
     }
 }
@@ -611,6 +773,19 @@ async fn run_websocket(
             }
             Err(e) => {
                 eprintln!("❌ WebSocket 连接尝试失败: {}", e);
+                let err_str = e.to_string();
+                let friendly = if err_str.contains("os error 65") || err_str.contains("No route to host") {
+                    "网络不可达，服务器无法连接".to_string()
+                } else if err_str.contains("os error 61") || err_str.contains("Connection refused") {
+                    "连接被拒绝，请检查服务器是否运行".to_string()
+                } else if err_str.contains("os error 50") || err_str.contains("Network is down") {
+                    "本机网络已断开".to_string()
+                } else if err_str.contains("401") || err_str.contains("Unauthorized") {
+                    "Token 认证失败，请检查客户端 Token".to_string()
+                } else {
+                    format!("连接失败: {}", e)
+                };
+                let _ = app.emit("websocket-error", &friendly);
             }
         }
 
@@ -722,6 +897,27 @@ pub fn run() {
                     let _ = main_window.center();
                 }
 
+                // 恢复窗口置顶状态
+                let always_on_top_path = format!("{}/.gotify_always_on_top.json", config_dir);
+                if let Ok(content) = std::fs::read_to_string(&always_on_top_path) {
+                    if let Ok(always_on_top) = serde_json::from_str::<bool>(&content) {
+                        if always_on_top {
+                            println!("📌 恢复窗口置顶状态: true");
+                            let _ = main_window.set_always_on_top(true);
+                            // macOS: 必须在主线程调用 Cocoa API
+                            #[cfg(target_os = "macos")]
+                            {
+                                if let Ok(ns_win_ptr) = main_window.ns_window() {
+                                    macos_window::schedule_set_floating(
+                                        ns_win_ptr as *mut std::ffi::c_void,
+                                        true,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // 等待 1 秒后自动连接
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
@@ -753,12 +949,13 @@ pub fn run() {
 
             println!("🔧 开始创建系统托盘...");
             let toggle_item = MenuItem::with_id(app, "toggle", "显示通知", true, None::<&str>)?;
+            let pin_item = MenuItem::with_id(app, "pin", "窗口置顶", true, None::<&str>)?;
             let settings_item = MenuItem::with_id(app, "settings", "设置", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-            let tray_menu = Menu::with_items(app, &[&toggle_item, &settings_item, &quit_item])?;
+            let tray_menu = Menu::with_items(app, &[&toggle_item, &pin_item, &settings_item, &quit_item])?;
 
-            // 加载托盘图标 - 解码 PNG 以获得 RGBA 数据
-            let icon_png = include_bytes!("../icons/icon.png");
+            // 加载托盘图标 - 解码透明 Template PNG
+            let icon_png = include_bytes!("../icons/tray-icon.png");
             let icon_image = image::load_from_memory(icon_png)
                 .map_err(|e| format!("Failed to decode tray icon: {}", e))?;
             let (icon_width, icon_height) = icon_image.dimensions();
@@ -768,6 +965,7 @@ pub fn run() {
 
             let tray = TrayIconBuilder::new()
                 .icon(icon)
+                .icon_as_template(true)
                 .menu(&tray_menu)
                 .show_menu_on_left_click(true)
                 .on_menu_event(|app, event| {
@@ -782,6 +980,9 @@ pub fn run() {
                                     let _ = window.set_focus();
                                 }
                             }
+                        }
+                        "pin" => {
+                            let _ = toggle_window_always_on_top(app.clone());
                         }
                         "settings" => {
                             println!("🖱️ 用户点击了设置菜单");
@@ -841,6 +1042,10 @@ pub fn run() {
             set_show_in_dock,
             get_sound_config,
             save_sound_config,
+            get_window_always_on_top,
+            set_window_always_on_top,
+            toggle_window_always_on_top,
+            start_dragging_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -984,3 +1189,66 @@ fn set_show_in_dock(app: tauri::AppHandle, enabled: bool) -> Result<(), String> 
 
     Ok(())
 }
+
+#[tauri::command]
+fn get_window_always_on_top(app: tauri::AppHandle) -> bool {
+    let config_dir = get_config_dir();
+    let path = format!("{}/.gotify_always_on_top.json", config_dir);
+    if let Ok(content) = std::fs::read_to_string(&path) {
+        if let Ok(val) = serde_json::from_str::<bool>(&content) {
+            return val;
+        }
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        return window.is_always_on_top().unwrap_or(false);
+    }
+    false
+}
+
+#[tauri::command]
+fn set_window_always_on_top(app: tauri::AppHandle, always_on_top: bool) -> Result<bool, String> {
+    if let Some(window) = app.get_webview_window("main") {
+        window.set_always_on_top(always_on_top).map_err(|e| format!("设置窗口置顶失败: {}", e))?;
+
+        // macOS: override constrainFrameRect so window can be placed at x=0
+        // Must be called on the main thread via dispatch_async_f
+        #[cfg(target_os = "macos")]
+        {
+            if let Ok(ns_win_ptr) = window.ns_window() {
+                macos_window::schedule_set_floating(
+                    ns_win_ptr as *mut std::ffi::c_void,
+                    always_on_top,
+                );
+            }
+        }
+    }
+    let config_dir = get_config_dir();
+    let path = format!("{}/.gotify_always_on_top.json", config_dir);
+    let _ = std::fs::write(&path, serde_json::to_string_pretty(&always_on_top).unwrap());
+    
+    // 广播事件通知前端更新状态
+    let _ = app.emit("tauri://always-on-top-changed", serde_json::json!({ "always_on_top": always_on_top }));
+    
+    println!("📌 窗口置顶状态已设置: {}", always_on_top);
+    Ok(always_on_top)
+}
+
+#[tauri::command]
+fn toggle_window_always_on_top(app: tauri::AppHandle) -> Result<bool, String> {
+    let current = if let Some(window) = app.get_webview_window("main") {
+        window.is_always_on_top().unwrap_or(false)
+    } else {
+        get_window_always_on_top(app.clone())
+    };
+    let new_state = !current;
+    set_window_always_on_top(app, new_state)
+}
+
+#[tauri::command]
+fn start_dragging_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        window.start_dragging().map_err(|e| format!("拖动窗口失败: {}", e))?;
+    }
+    Ok(())
+}
+

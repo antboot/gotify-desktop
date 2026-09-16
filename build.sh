@@ -26,11 +26,18 @@ echo "🔨 开始构建应用（这可能需要几分钟）..."
 cargo tauri build
 
 if [ $? -eq 0 ]; then
+    APP_PATH="src-tauri/target/release/bundle/macos/Gotify Notifier.app"
+    if [ -d "$APP_PATH" ]; then
+        echo "🔏 正在对应用进行签名 (绑定 identifier com.gotify.notifier)..."
+        codesign --force --deep --sign - --identifier "com.gotify.notifier" "$APP_PATH"
+        echo "✅ 签名完成"
+    fi
+
     echo ""
     echo "✅ 构建成功！"
     echo ""
     echo "📱 应用位置:"
-    echo "   target/release/bundle/macos/Gotify Notifier.app"
+    echo "   $APP_PATH"
     echo ""
     echo "🎉 你可以将应用拖动到 Applications 文件夹中使用"
 else

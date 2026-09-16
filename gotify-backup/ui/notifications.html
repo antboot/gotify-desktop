@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -62,6 +63,7 @@
                 transform: translateY(-20px);
                 opacity: 0;
             }
+
             to {
                 transform: translateY(0);
                 opacity: 1;
@@ -178,18 +180,22 @@
         }
 
         @keyframes pulse {
-            0%, 100% {
+
+            0%,
+            100% {
                 opacity: 1;
             }
+
             50% {
                 opacity: 0.7;
             }
         }
     </style>
 </head>
+
 <body>
     <div class="header">
-        <h1>🔔 Gotify 通知中心</h1>
+        <h1>🔔 Gotify 通知</h1>
         <div id="status" class="status">正在连接...</div>
     </div>
 
@@ -209,12 +215,12 @@
             const date = new Date(dateString);
             const now = new Date();
             const diff = now - date;
-            
+
             const seconds = Math.floor(diff / 1000);
             const minutes = Math.floor(seconds / 60);
             const hours = Math.floor(minutes / 60);
             const days = Math.floor(hours / 24);
-            
+
             if (days > 0) return `${days}天前`;
             if (hours > 0) return `${hours}小时前`;
             if (minutes > 0) return `${minutes}分钟前`;
@@ -278,14 +284,14 @@
         function addNotification(notif) {
             console.log('📨 收到通知:', notif);
             notifications.unshift(notif);
-            
+
             // 只保留最近50条
             if (notifications.length > 50) {
                 notifications = notifications.slice(0, 50);
             }
-            
+
             renderNotifications();
-            
+
             // 播放声音（可选）
             // new Audio('notification.mp3').play();
         }
@@ -297,7 +303,7 @@
             statusElement.classList.add('connected');
 
             const listen = window.__TAURI_INTERNALS__.listen;
-            
+
             // 监听消息
             listen('gotify-message', (event) => {
                 console.log('📬 收到事件:', event);
@@ -317,7 +323,7 @@
         } else {
             console.error('❌ Tauri API 不可用');
             statusElement.textContent = '❌ Tauri API 不可用';
-            
+
             // 测试数据
             setTimeout(() => {
                 addNotification({
@@ -342,4 +348,5 @@
         }, 60000);
     </script>
 </body>
+
 </html>

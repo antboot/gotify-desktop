@@ -12,7 +12,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "🔔 Gotify 通知中心",
+        "title": "🔔 Gotify 通知",
         "width": 380,
         "height": 600,
         "minWidth": 260,
@@ -21,6 +21,8 @@
         "fullscreen": false,
         "center": false,
         "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
         "alwaysOnTop": false
       }
     ],

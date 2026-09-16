@@ -207,6 +207,13 @@ wss://your-server.com/stream?token=YOUR_CLIENT_TOKEN
 2. WebSocket 连接状态是否为 "已连接"
 3. Gotify 服务器是否正常运行
 
+### Q: macOS 提示 "No route to host (os error 65)" 或局域网连接失败？
+
+**A**: 
+1. **本地网络权限与签名未绑定**：macOS 15+（macOS 27）对局域网权限进行了严格的 Bundle ID 和代码签名比对。请使用 `./build.sh` 进行标准重签名构建，或参考详细文档。
+2. **多网卡同网段冲突**：若本机同时启用了内置 Ethernet 和外接 USB 网卡且处于同一网段，请在「系统设置」->「网络」中停用未联网的冗余网卡。
+3. 详细排查与修复说明参见：[macOS 本地网络连接修复文档](./docs/network-connection-fix.md)。
+
 ### Q: 如何让应用开机自启动？
 
 **A**: 

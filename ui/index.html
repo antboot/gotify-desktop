@@ -75,10 +75,161 @@
             overflow: hidden;
         }
 
+        /* macOS 统一沉浸式标题栏 */
+        .titlebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 38px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--header-bg);
+            border-bottom: 1px solid var(--border-color);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            z-index: 2000;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .titlebar-drag-region {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 48px;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            -webkit-app-region: drag;
+            cursor: default;
+        }
+
+        .titlebar-traffic-lights-spacer {
+            width: 72px;
+            height: 100%;
+            flex-shrink: 0;
+            -webkit-app-region: drag;
+        }
+
+        .titlebar-title {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            pointer-events: none;
+            margin-right: 24px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            -webkit-app-region: drag;
+        }
+
+        .titlebar-title .title-bell {
+            font-size: 14px;
+            margin-right: 6px;
+        }
+
+        .titlebar-actions {
+            position: absolute;
+            right: 10px;
+            top: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            z-index: 2010;
+            -webkit-app-region: no-drag !important;
+        }
+
+        .pin-window-btn {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: transparent !important;
+            color: #555a64 !important;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: none !important;
+            -webkit-app-region: no-drag !important;
+            pointer-events: auto !important;
+            user-select: none;
+        }
+
+        .pin-window-btn svg {
+            transition: color 0.2s ease, opacity 0.2s ease;
+            opacity: 0.4;
+            color: #555a64 !important;
+        }
+
+        .pin-window-btn:hover {
+            background: rgba(255, 255, 255, 0.08) !important;
+            border-color: rgba(255, 255, 255, 0.25) !important;
+        }
+
+        .pin-window-btn:hover svg {
+            opacity: 0.75;
+            color: #9ca3af !important;
+        }
+
+        .pin-window-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* 置顶激活状态 - 纯黑白灰高对比：微透底色 + 醒目白色线框 + 亮白图钉，完全符合用户参考图 */
+        .pin-window-btn.pinned {
+            background: rgba(255, 255, 255, 0.12) !important;
+            border: 1.5px solid rgba(255, 255, 255, 0.45) !important;
+            color: #ffffff !important;
+            box-shadow: none !important;
+            opacity: 1 !important;
+        }
+
+        .pin-window-btn.pinned svg {
+            opacity: 1 !important;
+            color: #ffffff !important;
+            filter: none !important;
+        }
+
+        .pin-window-btn.pinned:hover {
+            background: rgba(255, 255, 255, 0.18) !important;
+            border-color: rgba(255, 255, 255, 0.65) !important;
+            color: #ffffff !important;
+            box-shadow: none !important;
+        }
+
+        /* 浅色模式下的置顶与未置顶状态 */
+        [data-theme="light"] .pin-window-btn {
+            border: 1px solid rgba(0, 0, 0, 0.12);
+            color: #9ca3af !important;
+        }
+
+        [data-theme="light"] .pin-window-btn svg {
+            color: #9ca3af !important;
+        }
+
+        [data-theme="light"] .pin-window-btn.pinned {
+            background: rgba(0, 0, 0, 0.08) !important;
+            border: 1.5px solid rgba(0, 0, 0, 0.45) !important;
+            color: #111827 !important;
+        }
+
+        [data-theme="light"] .pin-window-btn.pinned svg {
+            color: #111827 !important;
+        }
+
         .notifications-container {
             display: grid;
             gap: 10px;
             padding: 12px;
+            padding-top: 48px;
             padding-bottom: 56px;
             max-height: calc(100vh - 56px);
             overflow-y: auto;
@@ -120,10 +271,13 @@
         }
 
         @keyframes pulse-system-theme {
-            0%, 100% {
+
+            0%,
+            100% {
                 opacity: 1;
                 transform: scale(1);
             }
+
             50% {
                 opacity: 0.8;
                 transform: scale(1.05);
@@ -273,7 +427,9 @@
             margin-bottom: 0;
         }
 
-        .notification-message h1, .notification-message h2, .notification-message h3 {
+        .notification-message h1,
+        .notification-message h2,
+        .notification-message h3 {
             margin: 12px 0 8px 0;
             font-size: 1.1em;
             color: var(--text-primary);
@@ -337,7 +493,7 @@
             border-radius: 8px;
             padding: 4px 0;
             min-width: 180px;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
         }
 
         .context-menu-item {
@@ -513,8 +669,8 @@
             justify-content: space-between;
             align-items: center;
             position: sticky;
-            top: 0;
-            z-index: 900;
+            top: 38px;
+            z-index: 1900;
             animation: slideIn 0.3s ease-out;
         }
 
@@ -549,7 +705,7 @@
     <script src="lang.js"></script>
     <script src="tauri-api.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    
+
     <!-- Tauri v2 事件 API -->
     <script type="module">
         import { listen } from 'https://cdn.jsdelivr.net/npm/@tauri-apps/api@2/event.js';
@@ -559,6 +715,25 @@
 
 
     <div class="container">
+        <!-- macOS 统一沉浸式标题栏 -->
+        <header class="titlebar" id="appTitlebar" data-tauri-drag-region onmousedown="onTitlebarMouseDown(event)">
+            <div class="titlebar-drag-region" data-tauri-drag-region onmousedown="onTitlebarMouseDown(event)">
+                <div class="titlebar-traffic-lights-spacer" data-tauri-drag-region></div>
+                <div class="titlebar-title" data-tauri-drag-region>
+                    <span class="title-bell">🔔</span>
+                    <span class="title-text">Gotify 通知</span>
+                </div>
+            </div>
+            <div class="titlebar-actions" style="-webkit-app-region: no-drag;">
+                <button id="pinWindowBtn" class="pin-window-btn" onclick="toggleWindowAlwaysOnTop(event)" onmousedown="event.stopPropagation()" onpointerdown="event.stopPropagation()"
+                    title="窗口置顶" style="-webkit-app-region: no-drag;">
+                    <svg viewBox="0 0 1024 1024" width="13" height="13" fill="currentColor">
+                        <path d="M43.072 974.72l380.864-301.952 151.936 161.6c0 0 63.424 17.28 67.328-30.72l-3.904-163.584 225.088-259.648 98.048-5.696c0 0 76.928-15.488 21.184-82.752l-275.072-276.928c0 0-74.944-9.6-69.248 59.584l0 75.008L383.552 367.104 225.856 376.64c0 0-57.728 19.2-36.608 69.248l148.16 146.176L43.072 974.72 43.072 974.72z" />
+                    </svg>
+                </button>
+            </div>
+        </header>
+
         <!-- 掉线/重连状态栏 -->
         <div id="connectionBanner" class="connection-banner hidden">
             <span id="bannerText">⚠️ 未连接到 Gotify 服务器</span>
@@ -574,23 +749,104 @@
 
         <!-- 右键菜单 -->
         <div id="contextMenu" class="context-menu">
+            <div class="context-menu-item" onclick="toggleWindowAlwaysOnTop(event)">
+                <span id="contextMenuPinIcon">📌</span> <span id="contextMenuPinText" data-i18n="pinWindow">窗口置顶</span>
+            </div>
             <div class="context-menu-item" onclick="openSettings()">⚙️ <span data-i18n="settings">设置</span></div>
-            <div class="context-menu-item" onclick="openGotifyWeb()">🌐 <span data-i18n="openGotify">网页打开 Gotify</span></div>
+            <div class="context-menu-item" onclick="openGotifyWeb()">🌐 <span data-i18n="openGotify">网页打开 Gotify</span>
+            </div>
         </div>
 
-        <!-- 主题切换按钮 - 固定在右下角 -->
-        <button class="theme-toggle" onclick="toggleTheme()" data-i18n-title="toggleTheme" title="切换主题 (双击跟随系统)" ondblclick="toggleSystemThemeFollow()">
+        <!-- 主题切换按钮 - 固定在左下角 -->
+        <button class="theme-toggle" onclick="toggleTheme()" data-i18n-title="toggleTheme" title="切换主题 (双击跟随系统)"
+            ondblclick="toggleSystemThemeFollow()">
             <span id="theme-icon">🌙</span>
         </button>
 
         <!-- 清除全部按钮 -->
-        <button id="clearAllBtn" class="clear-all-btn" onclick="clearAllNotifications()" data-i18n-title="clearAll" title="清除所有（保留置顶）">
+        <button id="clearAllBtn" class="clear-all-btn" onclick="clearAllNotifications()" data-i18n-title="clearAll"
+            title="清除所有（保留置顶）">
             🗑️
         </button>
 
     </div>
 
     <script>
+        // 窗口置顶功能 (类似便签应用的悬浮置顶)
+        let isWindowAlwaysOnTop = false;
+
+        function updatePinButtonUI(pinned) {
+            isWindowAlwaysOnTop = !!pinned;
+            const btn = document.getElementById('pinWindowBtn');
+            if (btn) {
+                if (isWindowAlwaysOnTop) {
+                    btn.classList.add('pinned');
+                    btn.setAttribute('aria-pressed', 'true');
+                    btn.title = (typeof t === 'function' ? t('unpinWindow') : null) || '取消置顶 (当前已置顶)';
+                } else {
+                    btn.classList.remove('pinned');
+                    btn.setAttribute('aria-pressed', 'false');
+                    btn.title = (typeof t === 'function' ? t('pinWindow') : null) || '窗口置顶 (悬浮在其他界面之上)';
+                }
+            }
+            const contextPinText = document.getElementById('contextMenuPinText');
+            if (contextPinText) {
+                contextPinText.textContent = isWindowAlwaysOnTop ? ((typeof t === 'function' ? t('unpinWindow') : null) || '取消置顶') : ((typeof t === 'function' ? t('pinWindow') : null) || '窗口置顶');
+            }
+        }
+
+        async function initWindowAlwaysOnTop() {
+            try {
+                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                    const pinned = await window.__TAURI_INTERNALS__.invoke('get_window_always_on_top');
+                    updatePinButtonUI(pinned);
+                    console.log('📌 初始窗口置顶状态:', pinned);
+                }
+            } catch (e) {
+                console.warn('⚠️ 获取初始窗口置顶状态失败:', e);
+            }
+        }
+
+        async function toggleWindowAlwaysOnTop(event) {
+            if (event) {
+                if (typeof event.preventDefault === 'function') event.preventDefault();
+                if (typeof event.stopPropagation === 'function') event.stopPropagation();
+            }
+            const menu = document.getElementById('contextMenu');
+            if (menu) menu.style.display = 'none';
+
+            // 立即切换 UI 状态（乐观更新，零延迟反馈）
+            const targetState = !isWindowAlwaysOnTop;
+            updatePinButtonUI(targetState);
+
+            try {
+                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                    const result = await window.__TAURI_INTERNALS__.invoke('set_window_always_on_top', { alwaysOnTop: targetState });
+                    updatePinButtonUI(result);
+                    console.log('📌 窗口置顶状态已设置:', result);
+                }
+            } catch (e) {
+                console.error('❌ 切换窗口置顶失败:', e);
+                updatePinButtonUI(!targetState);
+            }
+        }
+
+        // 窗口拖动事件处理
+        function onTitlebarMouseDown(event) {
+            if (!event) return;
+            // 排除置顶按钮及按钮区域，只响应主按键（鼠标左键）
+            if (event.target.closest('#pinWindowBtn') || event.target.closest('.titlebar-actions') || event.button !== 0) {
+                return;
+            }
+            try {
+                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                    window.__TAURI_INTERNALS__.invoke('start_dragging_window');
+                }
+            } catch (e) {
+                console.warn('拖动窗口失败:', e);
+            }
+        }
+
         // 更新所有带 data-i18n 属性的元素文本
         function updateTranslations() {
             document.querySelectorAll('[data-i18n]').forEach(el => {
@@ -599,6 +855,7 @@
             document.querySelectorAll('[data-i18n-title]').forEach(el => {
                 el.title = t(el.dataset.i18nTitle);
             });
+            updatePinButtonUI(isWindowAlwaysOnTop);
         }
 
         let notifications = [];
@@ -749,7 +1006,7 @@
         // 右键菜单
         function initContextMenu() {
             const menu = document.getElementById('contextMenu');
-            document.addEventListener('contextmenu', function(e) {
+            document.addEventListener('contextmenu', function (e) {
                 if (window.getSelection && window.getSelection().toString().length > 0) return;
                 e.preventDefault();
                 menu.style.display = 'block';
@@ -764,12 +1021,13 @@
                 menu.style.left = x + 'px';
                 menu.style.top = y + 'px';
             });
-            document.addEventListener('click', function() {
+            document.addEventListener('click', function () {
                 menu.style.display = 'none';
             });
         }
         initContextMenu();
         updateTranslations();
+        initWindowAlwaysOnTop();
 
         function openSettings() {
             document.getElementById('contextMenu').style.display = 'none';
@@ -805,41 +1063,8 @@
         }
 
         async function restoreWindowPosition() {
-            if (typeof window.__TAURI_INTERNALS__ === 'undefined') {
-                console.warn('⚠️ Tauri API 不可用，无法恢复窗口位置');
-                return;
-            }
-
-            try {
-                const savedPosition = localStorage.getItem('windowPosition');
-                if (!savedPosition) {
-                    console.log('ℹ️ 没有保存的窗口位置');
-                    return;
-                }
-
-                const position = JSON.parse(savedPosition);
-                const { getCurrentWindow } = window.__TAURI_INTERNALS__.window;
-                const appWindow = getCurrentWindow();
-
-                if (!isSavedPositionValid(position)) {
-                    console.warn('⚠️ 保存的窗口位置无效，重置到默认位置');
-                    localStorage.removeItem('windowPosition');
-                    await appWindow.center();
-                    await appWindow.setSize({ width: 380, height: 600 });
-                    await appWindow.unminimize();
-                    await appWindow.show();
-                    return;
-                }
-
-                const { LogicalPosition } = window.__TAURI_INTERNALS__.window;
-                await appWindow.setPosition(new LogicalPosition(position.x, position.y));
-                await appWindow.unminimize();
-                await appWindow.show();
-
-                console.log('📍 窗口位置已恢复:', position);
-            } catch (error) {
-                console.error('恢复窗口位置失败:', error);
-            }
+            // 窗口位置已由 Rust 后端在启动时自动恢复
+            console.log('📍 窗口位置已由后端在启动时恢复');
         }
 
         // 等待 DOM 和 Tauri 完全加载
@@ -890,7 +1115,7 @@
                         listen = window.__TAURI_LISTEN__;
                         retries++;
                     }
-                    
+
                     if (typeof listen !== 'function') {
                         console.error('❌ listen 不是函数，类型:', typeof listen);
                         throw new Error('window.__TAURI_LISTEN__ 不可用');
@@ -905,7 +1130,7 @@
                         console.log('事件对象:', event);
                         console.log('事件 payload:', event.payload);
                         console.log('事件 payload 类型:', typeof event.payload);
-                        
+
                         // 确保 payload 存在
                         if (event.payload) {
                             addNotification(event.payload);
@@ -931,6 +1156,16 @@
                         updateConnectionBanner(event.payload);
                     });
                     console.log('✅ websocket-status 监听器注册成功！');
+
+                    // 注册 always-on-top 状态监听器
+                    console.log('正在注册 always-on-top 状态监听器...');
+                    const unlistenPin = await listen('tauri://always-on-top-changed', (event) => {
+                        console.log('📌 收到 tauri://always-on-top-changed 事件:', event.payload);
+                        if (event && event.payload && typeof event.payload.always_on_top === 'boolean') {
+                            updatePinButtonUI(event.payload.always_on_top);
+                        }
+                    });
+                    console.log('✅ always-on-top 状态监听器注册成功！');
 
                     // 检查初始 WebSocket 状态
                     try {
@@ -968,18 +1203,22 @@
                     // 初始化系统主题监听器
                     await initSystemThemeListener();
 
+                    // 初始化窗口置顶状态
+                    await initWindowAlwaysOnTop();
+
                 } catch (error) {
                     console.error('❌❌❌ 注册监听器时出错:');
                     console.error('错误对象:', error);
                     console.error('错误消息:', error.message);
                     console.error('错误堆栈:', error.stack);
-                    
+
                     // 即使监听器注册失败，也要显示界面
                     console.log('⚠️ 尝试恢复窗口位置和初始化主题...');
                     try {
                         await restoreWindowPosition();
                         await initWindowPositionTracking();
                         await initSystemThemeListener();
+                        await initWindowAlwaysOnTop();
                     } catch (e) {
                         console.error('恢复失败:', e);
                     }
