@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Gotify Notifier 需要访问本地局域网以连接 Gotify 服务器获取推送通知。</string>
+</dict>
+</plist>
