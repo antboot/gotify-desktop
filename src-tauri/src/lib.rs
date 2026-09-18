@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use tauri::{Emitter, Manager, State};
 use tauri::tray::{TrayIconBuilder, TrayIcon};
 use futures_util::{SinkExt, StreamExt};
@@ -226,6 +227,9 @@ struct AppState {
     ws_running: Arc<Mutex<bool>>,
     window_position: Arc<Mutex<Option<WindowPosition>>>,
     tray_icon: Arc<Mutex<Option<TrayIcon>>>,
+    /// Windows 贴边防抖令牌：每次 Moved 事件自增，spawn 出去的 snap 任务
+    /// 先等待后比对，令牌一致才执行，否则放弃（同一时刻只有最后一次生效）
+    snap_debounce_token: Arc<AtomicU64>,
 }
 
 // 获取跨平台的配置目录
@@ -549,15 +553,104 @@ async fn is_websocket_running(state: State<'_, AppState>) -> Result<bool, String
 }
 
 #[tauri::command]
+async fn snap_window_to_edge(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    edge: String,
+) -> Result<(), String> {
+    let window = app.get_webview_window("main").ok_or("无法获取主窗口")?;
+    let size = window.outer_size().map_err(|e| format!("获取大小失败: {}", e))?;
+    let mut position = window.outer_position().map_err(|e| format!("获取位置失败: {}", e))?;
+
+    if let Ok(Some(monitor)) = window.current_monitor() {
+        let mon_pos = monitor.position();
+        let mon_size = monitor.size();
+        let scale = monitor.scale_factor();
+        let border_offset = (7.0 * scale).round() as i32;
+
+        let mon_left = mon_pos.x;
+        let mon_right = mon_pos.x + mon_size.width as i32;
+        let win_w = size.width as i32;
+
+        match edge.as_str() {
+            "left" => {
+                position.x = mon_left - border_offset;
+            }
+            "right" => {
+                position.x = mon_right - win_w + border_offset;
+            }
+            _ => {}
+        }
+        let _ = window.set_position(tauri::Position::Physical(position));
+        let _ = save_window_position_auto(app.clone(), state).await;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 async fn save_window_position_auto(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let window = app.get_webview_window("main").unwrap();
     
-    // 统一使用 outer_position 获取左上角坐标，inner_size 获取内容区域大小
-    let position = window.outer_position().map_err(|e| format!("获取位置失败: {}", e))?;
-    let size = window.inner_size().map_err(|e| format!("获取大小失败: {}", e))?;
+    // 统一使用 outer_position 获取左上角坐标，outer_size 获取完整窗口大小
+    let mut position = window.outer_position().map_err(|e| format!("获取位置失败: {}", e))?;
+    let size = window.outer_size().map_err(|e| format!("获取大小失败: {}", e))?;
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(Some(monitor)) = window.current_monitor() {
+            let mon_pos = monitor.position();
+            let mon_size = monitor.size();
+            let scale = monitor.scale_factor();
+            let border_offset = (7.0 * scale).round() as i32;
+            let snap_threshold = (32.0 * scale).round() as i32;
+
+            let mon_left = mon_pos.x;
+            let mon_right = mon_pos.x + mon_size.width as i32;
+            let mon_top = mon_pos.y;
+            let mon_bottom = mon_pos.y + mon_size.height as i32;
+
+            let win_w = size.width as i32;
+            let win_h = size.height as i32;
+
+            let mut snapped = false;
+
+            // 1. 左贴边磁性吸附 (检测窗口可视左边缘是否靠近屏幕左侧)
+            let left_dist = ((position.x + border_offset) - mon_left).abs();
+            if left_dist <= snap_threshold {
+                position.x = mon_left - border_offset;
+                snapped = true;
+            } else {
+                // 2. 右贴边磁性吸附 (检测窗口可视右边缘是否靠近屏幕右侧)
+                let right_dist = ((position.x + win_w - border_offset) - mon_right).abs();
+                if right_dist <= snap_threshold {
+                    position.x = mon_right - win_w + border_offset;
+                    snapped = true;
+                }
+            }
+
+            // 3. 顶贴边磁性吸附
+            let top_dist = (position.y - mon_top).abs();
+            if top_dist <= snap_threshold {
+                position.y = mon_top;
+                snapped = true;
+            } else {
+                // 4. 底贴边磁性吸附
+                let bottom_dist = ((position.y + win_h - border_offset) - mon_bottom).abs();
+                if bottom_dist <= snap_threshold {
+                    position.y = mon_bottom - win_h + border_offset;
+                    snapped = true;
+                }
+            }
+
+            if snapped {
+                println!("🧲 Windows 贴边磁性吸附生效: x={}, y={}", position.x, position.y);
+                let _ = window.set_position(tauri::Position::Physical(position));
+            }
+        }
+    }
     
     let window_pos = WindowPosition {
         x: position.x,
@@ -820,6 +913,7 @@ pub fn run() {
             ws_running: Arc::new(Mutex::new(false)),
             window_position: Arc::new(Mutex::new(None)),
             tray_icon: Arc::new(Mutex::new(None)),
+            snap_debounce_token: Arc::new(AtomicU64::new(0)),
         })
         .setup(|app| {
             // macOS: 根据用户设置决定是否显示 Dock 图标
@@ -842,6 +936,20 @@ pub fn run() {
 
             let app_handle = app.handle().clone();
             let main_window = app.get_webview_window("main").unwrap();
+
+            // Windows: 根据用户设置决定是否在任务栏显示图标
+            #[cfg(target_os = "windows")]
+            {
+                let config_dir = get_config_dir();
+                let dock_path = format!("{}/.gotify_show_in_dock.json", config_dir);
+                let show_in_dock = std::fs::read_to_string(&dock_path)
+                    .ok()
+                    .and_then(|c| serde_json::from_str::<bool>(&c).ok())
+                    .unwrap_or(true);
+                if !show_in_dock {
+                    let _ = main_window.set_skip_taskbar(true);
+                }
+            }
             
             // 恢复窗口位置
             tauri::async_runtime::spawn(async move {
@@ -954,8 +1062,12 @@ pub fn run() {
             let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
             let tray_menu = Menu::with_items(app, &[&toggle_item, &pin_item, &settings_item, &quit_item])?;
 
-            // 加载托盘图标 - 解码透明 Template PNG
+            // 加载托盘图标 - macOS 使用单色 Template，Windows 使用彩色图标
+            #[cfg(target_os = "macos")]
             let icon_png = include_bytes!("../icons/tray-icon.png");
+            #[cfg(not(target_os = "macos"))]
+            let icon_png = include_bytes!("../icons/32x32.png");
+
             let icon_image = image::load_from_memory(icon_png)
                 .map_err(|e| format!("Failed to decode tray icon: {}", e))?;
             let (icon_width, icon_height) = icon_image.dimensions();
@@ -963,11 +1075,32 @@ pub fn run() {
             let icon = tauri::image::Image::new_owned(icon_rgba, icon_width, icon_height);
             println!("✅ 托盘图标加载成功");
 
+            let is_macos = cfg!(target_os = "macos");
+
             let tray = TrayIconBuilder::new()
                 .icon(icon)
-                .icon_as_template(true)
+                .icon_as_template(is_macos)
                 .menu(&tray_menu)
-                .show_menu_on_left_click(true)
+                .show_menu_on_left_click(is_macos)
+                .on_tray_icon_event(|tray, event| {
+                    use tauri::tray::{TrayIconEvent, MouseButton, MouseButtonState};
+                    if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            if window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false) {
+                                if window.is_focused().unwrap_or(false) {
+                                    let _ = window.hide();
+                                } else {
+                                    let _ = window.set_focus();
+                                }
+                            } else {
+                                let _ = window.show();
+                                let _ = window.unminimize();
+                                let _ = window.set_focus();
+                            }
+                        }
+                    }
+                })
                 .on_menu_event(|app, event| {
                     match event.id.as_ref() {
                         "toggle" => {
@@ -1006,6 +1139,33 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                // Windows & 主窗口：点击右上角关闭按钮时，隐藏到托盘而不是直接退出应用
+                if window.label() == "main" {
+                    let _ = window.hide();
+                    api.prevent_close();
+                }
+            }
+            tauri::WindowEvent::Moved(_) => {
+                // Windows 拖动贴边：在 Moved 事件停止后 200ms 才执行磁性吸附
+                // 用原子令牌实现轻量级防抖，避免拖动过程中窗口跳动
+                #[cfg(target_os = "windows")]
+                if window.label() == "main" {
+                    let state: tauri::State<AppState> = window.state();
+                    let token_arc = state.snap_debounce_token.clone();
+                    // 自增令牌，旧的 spawn 任务检测到令牌变化后会自动放弃
+                    let current_token = token_arc.fetch_add(1, AtomicOrdering::SeqCst) + 1;
+                    let app = window.app_handle().clone();
+                    tauri::async_runtime::spawn(async move {
+                        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                        // 如果令牌未变（没有新的移动事件），才执行贴边
+                        if token_arc.load(AtomicOrdering::SeqCst) == current_token {
+                            let state: tauri::State<AppState> = app.state();
+                            let _ = save_window_position_auto(app.clone(), state).await;
+                        }
+                    });
+                }
+            }
             tauri::WindowEvent::ThemeChanged(theme) => {
                 println!("🎨 系统主题已更改: {:?}", theme);
 
@@ -1046,6 +1206,7 @@ pub fn run() {
             set_window_always_on_top,
             toggle_window_always_on_top,
             start_dragging_window,
+            snap_window_to_edge,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -1053,6 +1214,18 @@ pub fn run() {
 
 #[tauri::command]
 fn get_auto_launch() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        use winreg::RegKey;
+        use winreg::enums::*;
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        if let Ok(key) = hkcu.open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Run") {
+            if key.get_value::<String, _>("GotifyNotifier").is_ok() {
+                return true;
+            }
+        }
+    }
+
     let config_dir = get_config_dir();
     let path = format!("{}/.gotify_auto_launch.json", config_dir);
     std::fs::read_to_string(&path)
@@ -1156,6 +1329,29 @@ fn set_auto_launch(enabled: bool) -> Result<(), String> {
         }
     }
 
+    #[cfg(target_os = "windows")]
+    {
+        use winreg::RegKey;
+        use winreg::enums::*;
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let key_path = r"Software\Microsoft\Windows\CurrentVersion\Run";
+        let (key, _) = hkcu.create_subkey(key_path)
+            .map_err(|e| format!("打开 Windows 注册表失败: {}", e))?;
+
+        let app_name = "GotifyNotifier";
+        if enabled {
+            let exe = std::env::current_exe().map_err(|e| format!("获取当前程序路径失败: {}", e))?;
+            let exe_str = exe.to_string_lossy().to_string();
+            let cmd = format!("\"{}\"", exe_str);
+            key.set_value(app_name, &cmd)
+                .map_err(|e| format!("写入注册表开机启动失败: {}", e))?;
+            println!("✅ 已写入 Windows 开机启动注册表: {}", cmd);
+        } else {
+            let _ = key.delete_value(app_name);
+            println!("✅ 已从 Windows 开机启动注册表移除: {}", app_name);
+        }
+    }
+
     Ok(())
 }
 
@@ -1163,10 +1359,11 @@ fn set_auto_launch(enabled: bool) -> Result<(), String> {
 fn get_show_in_dock() -> bool {
     let config_dir = get_config_dir();
     let path = format!("{}/.gotify_show_in_dock.json", config_dir);
+    let default_val = cfg!(target_os = "windows");
     std::fs::read_to_string(&path)
         .ok()
         .and_then(|c| serde_json::from_str::<bool>(&c).ok())
-        .unwrap_or(false)
+        .unwrap_or(default_val)
 }
 
 #[tauri::command]
@@ -1174,9 +1371,9 @@ fn set_show_in_dock(app: tauri::AppHandle, enabled: bool) -> Result<(), String> 
     let config_dir = get_config_dir();
     let path = format!("{}/.gotify_show_in_dock.json", config_dir);
     std::fs::write(&path, serde_json::to_string_pretty(&enabled).unwrap())
-        .map_err(|e| format!("保存 Dock 设置失败: {}", e))?;
+        .map_err(|e| format!("保存任务栏/Dock 设置失败: {}", e))?;
 
-    // 运行时切换 Dock 显示
+    // 运行时切换 Dock 显示 (macOS)
     #[cfg(target_os = "macos")]
     {
         let policy = if enabled {
@@ -1185,6 +1382,14 @@ fn set_show_in_dock(app: tauri::AppHandle, enabled: bool) -> Result<(), String> 
             tauri::ActivationPolicy::Accessory
         };
         let _ = app.set_activation_policy(policy);
+    }
+
+    // 运行时切换任务栏图标显示 (Windows)
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.set_skip_taskbar(!enabled);
+        }
     }
 
     Ok(())

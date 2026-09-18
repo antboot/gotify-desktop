@@ -227,12 +227,135 @@
 
         .notifications-container {
             display: grid;
+            grid-template-columns: minmax(0, 1fr);
             gap: 10px;
             padding: 12px;
             padding-top: 48px;
             padding-bottom: 56px;
             max-height: calc(100vh - 56px);
             overflow-y: auto;
+            overflow-x: hidden;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        /* Windows 专属布局优化：彻底折叠前端自定义标题栏 */
+        /* height:0 + overflow:hidden 折叠容器，position:fixed 子元素不受影响，仍正常显示 */
+        .os-windows .titlebar {
+            height: 0 !important;
+            min-height: 0 !important;
+            overflow: hidden !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border: none !important;
+            background: transparent !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+        }
+
+        /* 置顶按钮：无清除按钮时停靠在右下角（与左下角主题按钮两端对称）；有清除按钮时平滑滑向正中间居中 */
+        .os-windows .titlebar-actions {
+            position: fixed;
+            top: auto;
+            right: auto;
+            bottom: 16px;
+            left: calc(100% - 16px);
+            transform: translateX(-100%);
+            z-index: 1000;
+            pointer-events: auto;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), bottom 0.2s ease;
+        }
+
+        /* 当清除按钮显示时（有通知），置顶按钮自动平滑滑动至正中间居中 */
+        .os-windows:has(#clearAllBtn.visible) .titlebar-actions,
+        html.has-clear-all.os-windows .titlebar-actions,
+        html.has-clear-all .os-windows .titlebar-actions {
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        /* Windows 下置顶按钮风格：32x32 圆形，与主题按钮及清除按钮完全一致 */
+        html.os-windows .pin-window-btn,
+        html.os-windows [data-theme="light"] .pin-window-btn {
+            width: 32px !important;
+            height: 32px !important;
+            border-radius: 50% !important;
+            border: 1px solid var(--border-color) !important;
+            background: var(--card-bg) !important;
+            color: var(--text-secondary) !important;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px var(--shadow) !important;
+            -webkit-app-region: no-drag !important;
+            pointer-events: auto !important;
+            user-select: none;
+            padding: 0;
+            opacity: 1 !important;
+        }
+
+        html.os-windows .pin-window-btn svg,
+        html.os-windows [data-theme="light"] .pin-window-btn svg {
+            width: 14px;
+            height: 14px;
+            opacity: 0.8;
+            color: var(--text-secondary) !important;
+            transition: all 0.2s ease;
+        }
+
+        html.os-windows .pin-window-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px var(--shadow) !important;
+            background: var(--card-bg) !important;
+            border-color: var(--border-color) !important;
+        }
+
+        html.os-windows .pin-window-btn:hover svg {
+            opacity: 1;
+            color: var(--text-primary) !important;
+        }
+
+        html.os-windows .pin-window-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Windows 置顶激活状态：使用主题主色（Accent）高亮显示，与主题效果和谐统一 */
+        html.os-windows .pin-window-btn.pinned,
+        html.os-windows [data-theme="light"] .pin-window-btn.pinned {
+            background: var(--accent) !important;
+            border-color: var(--accent) !important;
+            color: #ffffff !important;
+            box-shadow: 0 2px 10px rgba(99, 102, 241, 0.45) !important;
+            opacity: 1 !important;
+        }
+
+        html.os-windows .pin-window-btn.pinned svg,
+        html.os-windows [data-theme="light"] .pin-window-btn.pinned svg {
+            opacity: 1 !important;
+            color: #ffffff !important;
+        }
+
+        html.os-windows .pin-window-btn.pinned:hover {
+            background: var(--accent-hover) !important;
+            border-color: var(--accent-hover) !important;
+            box-shadow: 0 4px 14px rgba(99, 102, 241, 0.55) !important;
+            transform: scale(1.1);
+        }
+
+        html.os-windows .pin-window-btn.pinned:active {
+            transform: scale(0.95);
+        }
+
+        /* Windows 下内容紧贴原生标题栏，去掉多余顶部空白 */
+        .os-windows .notifications-container {
+            padding-top: 12px;
         }
 
         .theme-toggle {
@@ -284,6 +407,7 @@
             }
         }
 
+        /* 清除全部按钮：保持与主题按钮、置顶按钮完全一致的 32x32 圆形卡片风格，带平滑淡入淡出及缩放过渡 */
         .clear-all-btn {
             position: fixed;
             bottom: 16px;
@@ -291,33 +415,44 @@
             width: 32px;
             height: 32px;
             border-radius: 50%;
-            background: var(--danger);
-            color: white;
-            border: 1px solid transparent;
+            border: 1px solid var(--border-color);
+            background: var(--card-bg);
+            color: var(--text-primary);
             font-size: 14px;
             cursor: pointer;
-            display: none;
+            display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.2s ease;
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.6);
+            transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease, background 0.2s ease;
             box-shadow: 0 2px 8px var(--shadow);
             z-index: 1000;
         }
 
-        .clear-all-btn:hover {
-            background: #dc2626;
+        .clear-all-btn.visible {
+            opacity: 1;
+            pointer-events: auto;
+            transform: scale(1);
+        }
+
+        .clear-all-btn.visible:hover {
             transform: scale(1.1);
             box-shadow: 0 4px 12px var(--shadow);
         }
 
-        .clear-all-btn:active {
+        .clear-all-btn.visible:active {
             transform: scale(0.95);
         }
 
-        .clear-all-btn.visible {
-            display: flex;
-        }
 
+        .notification-card-wrapper {
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+        }
 
         .notification-card {
             background: var(--card-bg);
@@ -326,10 +461,16 @@
             box-shadow: 0 1px 3px var(--shadow);
             animation: slideIn 0.3s ease-out;
             position: relative;
-            overflow: visible;
+            overflow: hidden;
             border: 1px solid var(--border-color);
             transition: all 0.3s ease;
             cursor: pointer;
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+            word-break: break-word;
+            overflow-wrap: anywhere;
         }
 
         .notification-card.pinned {
@@ -378,6 +519,9 @@
             justify-content: space-between;
             align-items: flex-start;
             margin-bottom: 12px;
+            gap: 8px;
+            min-width: 0;
+            width: 100%;
         }
 
         .notification-title {
@@ -385,8 +529,11 @@
             font-weight: 600;
             color: var(--text-primary);
             flex: 1;
-            padding-right: 8px;
+            min-width: 0;
+            padding-right: 4px;
             line-height: 1.4;
+            word-break: break-word;
+            overflow-wrap: anywhere;
         }
 
         .notification-time {
@@ -400,11 +547,22 @@
             line-height: 1.5;
             white-space: pre-wrap;
             word-wrap: break-word;
+            word-break: break-word;
+            overflow-wrap: anywhere;
             font-size: 13px;
             max-height: 200px;
             overflow: hidden;
             position: relative;
             transition: max-height 0.3s ease;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .notification-message a {
+            color: var(--accent);
+            text-decoration: underline;
+            word-break: break-all;
+            overflow-wrap: anywhere;
         }
 
         .notification-message.expanded {
@@ -433,6 +591,8 @@
             margin: 12px 0 8px 0;
             font-size: 1.1em;
             color: var(--text-primary);
+            word-break: break-word;
+            overflow-wrap: anywhere;
         }
 
         .notification-message code {
@@ -441,6 +601,9 @@
             border-radius: 4px;
             font-family: monospace;
             font-size: 0.9em;
+            word-break: break-all;
+            overflow-wrap: anywhere;
+            white-space: pre-wrap;
         }
 
         .notification-message pre {
@@ -449,6 +612,10 @@
             border-radius: 6px;
             overflow-x: auto;
             margin: 8px 0;
+            max-width: 100%;
+            box-sizing: border-box;
+            white-space: pre-wrap;
+            word-break: break-word;
         }
 
         .notification-message blockquote {
@@ -456,6 +623,8 @@
             padding-left: 12px;
             color: var(--text-tertiary);
             margin: 8px 0;
+            word-break: break-word;
+            overflow-wrap: anywhere;
         }
 
         .notification-card.expanded .notification-message {
@@ -528,7 +697,9 @@
 
         .notification-actions {
             display: flex;
-            gap: 8px;
+            gap: 6px;
+            flex-shrink: 0;
+            align-items: center;
         }
 
         .action-btn {
@@ -630,20 +801,81 @@
             }
         }
 
-        /* 响应式布局 - 适配更窄的窗口 */
+        /* 响应式布局 - 适配窄窗口及最小窗口模式 (minWidth: 260px) */
         @media (max-width: 400px) {
             .header h1 {
                 font-size: 14px;
             }
 
-            .theme-toggle {
-                width: 32px;
-                height: 32px;
-                font-size: 14px;
+            .notification-card {
+                padding: 12px;
+            }
+        }
+
+        @media (max-width: 320px) {
+            .notifications-container {
+                padding-left: 8px;
+                padding-right: 8px;
+                padding-bottom: 54px;
+                gap: 8px;
+            }
+
+            .os-windows .notifications-container {
+                padding-top: 8px;
             }
 
             .notification-card {
-                padding: 12px;
+                padding: 10px 10px 8px 10px;
+                border-radius: 8px;
+            }
+
+            .notification-header {
+                margin-bottom: 8px;
+                gap: 6px;
+            }
+
+            .notification-title {
+                font-size: 13px;
+                line-height: 1.35;
+            }
+
+            .notification-message {
+                font-size: 12px;
+                line-height: 1.45;
+            }
+
+            .action-btn {
+                padding: 2px 4px;
+                font-size: 11px;
+            }
+
+            .notification-meta {
+                margin-top: 4px;
+                padding-top: 4px;
+                font-size: 10px;
+            }
+
+            .theme-toggle {
+                left: 10px;
+                bottom: 12px;
+            }
+
+            .os-windows .titlebar-actions {
+                bottom: 12px;
+                left: calc(100% - 10px);
+                transform: translateX(-100%);
+            }
+
+            .os-windows:has(#clearAllBtn.visible) .titlebar-actions,
+            html.has-clear-all.os-windows .titlebar-actions,
+            html.has-clear-all .os-windows .titlebar-actions {
+                left: 50%;
+                transform: translateX(-50%);
+            }
+
+            .clear-all-btn {
+                right: 10px;
+                bottom: 12px;
             }
         }
 
@@ -701,6 +933,15 @@
 </head>
 
 <body>
+    <!-- 平台自适应检测 -->
+    <script>
+        (function() {
+            var isWin = /windows|win32/i.test(navigator.userAgent) || (navigator.platform && navigator.platform.indexOf('Win') !== -1);
+            if (isWin) {
+                document.documentElement.classList.add('os-windows');
+            }
+        })();
+    </script>
     <!-- Tauri API 初始化脚本 - 必须在所有脚本之前加载 -->
     <script src="lang.js"></script>
     <script src="tauri-api.js"></script>
@@ -751,6 +992,12 @@
         <div id="contextMenu" class="context-menu">
             <div class="context-menu-item" onclick="toggleWindowAlwaysOnTop(event)">
                 <span id="contextMenuPinIcon">📌</span> <span id="contextMenuPinText" data-i18n="pinWindow">窗口置顶</span>
+            </div>
+            <div class="context-menu-item" onclick="snapWindowToEdge('right')">
+                <span>👉</span> <span>贴靠屏幕右侧</span>
+            </div>
+            <div class="context-menu-item" onclick="snapWindowToEdge('left')">
+                <span>👈</span> <span>贴靠屏幕左侧</span>
             </div>
             <div class="context-menu-item" onclick="openSettings()">⚙️ <span data-i18n="settings">设置</span></div>
             <div class="context-menu-item" onclick="openGotifyWeb()">🌐 <span data-i18n="openGotify">网页打开 Gotify</span>
@@ -1283,11 +1530,13 @@
                     </div>
                 `;
                 if (clearAllBtn) clearAllBtn.classList.remove('visible');
+                document.documentElement.classList.remove('has-clear-all');
                 return;
             }
 
             // 显示清除按钮
             if (clearAllBtn) clearAllBtn.classList.add('visible');
+            document.documentElement.classList.add('has-clear-all');
 
             // 分离置顶和非置顶通知
             const pinnedNotifs = notifications.filter(n => n.pinned);
@@ -1539,6 +1788,9 @@
         // 窗口位置跟踪
         let savePositionTimeout;
 
+        // 是否正在拖动窗口（用于判断是否应触发贴边吸附）
+        let isWindowDragging = false;
+
         async function initWindowPositionTracking() {
             if (typeof window.__TAURI_INTERNALS__ === 'undefined') return;
 
@@ -1549,14 +1801,15 @@
                 const listen = window.__TAURI_LISTEN__;
                 if (typeof listen === 'function') {
 
-                    // 监听窗口移动事件
-                    await listen('tauri://move', (event) => {
-                        console.log('🪟 窗口移动事件');
-                        saveWindowPositionDebounced();
+                    // 监听窗口移动事件：只标记"正在拖动"，清掉旧定时器
+                    // 不在拖动过程中触发磁性吸附，防止窗口在拖动途中跳动
+                    await listen('tauri://move', () => {
+                        isWindowDragging = true;
+                        clearTimeout(savePositionTimeout);
                     });
 
-                    // 监听窗口调整大小事件
-                    await listen('tauri://resize', (event) => {
+                    // 监听窗口调整大小事件（不是拖动，正常防抖保存）
+                    await listen('tauri://resize', () => {
                         console.log('🪟 窗口调整大小事件');
                         saveWindowPositionDebounced();
                     });
@@ -1565,6 +1818,19 @@
                 } else {
                     console.warn('⚠️ Tauri 事件 API 不可用，仅在关闭时保存');
                 }
+
+                // 松开鼠标时触发贴边 & 保存（真正的拖动结束信号）
+                // capture:true 确保在任意元素上松手都能被捕获
+                window.addEventListener('mouseup', () => {
+                    if (isWindowDragging) {
+                        isWindowDragging = false;
+                        // 等 80ms 让 OS 稳定窗口最终位置，再执行磁性贴边
+                        savePositionTimeout = setTimeout(() => {
+                            console.log('🧲 拖动松手，触发磁性贴边 & 保存位置');
+                            saveWindowPosition();
+                        }, 80);
+                    }
+                }, { capture: true });
 
                 // 页面关闭时保存
                 window.addEventListener('beforeunload', saveWindowPosition);
@@ -1575,13 +1841,25 @@
             }
         }
 
-        // 防抖保存函数
+        // 贴靠屏幕边缘 (左/右)
+        async function snapWindowToEdge(edge) {
+            if (typeof window.__TAURI_INTERNALS__ === 'undefined') return;
+            try {
+                const { invoke } = window.__TAURI_INTERNALS__;
+                await invoke('snap_window_to_edge', { edge });
+                console.log(`🧲 窗口已贴靠到屏幕${edge === 'right' ? '右侧' : '左侧'}`);
+            } catch (error) {
+                console.error('贴边失败:', error);
+            }
+        }
+
+        // resize 事件专用防抖（不含贴边触发，仅保存新尺寸）
         function saveWindowPositionDebounced() {
             clearTimeout(savePositionTimeout);
             savePositionTimeout = setTimeout(() => {
-                console.log('💾 防抖保存窗口位置');
+                console.log('💾 防抖保存窗口尺寸');
                 saveWindowPosition();
-            }, 1000); // 1秒后保存
+            }, 300);
         }
 
         async function saveWindowPosition() {

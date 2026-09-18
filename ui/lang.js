@@ -162,6 +162,31 @@ const translations = {
     }
 };
 
+// 平台自适应文案调整
+(function() {
+    const isWindows = typeof navigator !== 'undefined' && (
+        /windows|win32/i.test(navigator.userAgent) || (navigator.platform && navigator.platform.indexOf('Win') !== -1)
+    );
+    if (isWindows) {
+        if (translations['zh-CN']) {
+            translations['zh-CN']['autoLaunchDesc'] = '登录 Windows 时自动启动 Gotify';
+            translations['zh-CN']['showInDock'] = '在任务栏中显示';
+            translations['zh-CN']['showInDockDesc'] = '在系统任务栏显示应用图标（关闭则仅在托盘常驻）';
+            translations['zh-CN']['showInDockEnabled'] = '已在任务栏中显示';
+            translations['zh-CN']['showInDockDisabled'] = '已从任务栏中隐藏（仅在托盘常驻）';
+            translations['zh-CN']['showInDockFailed'] = '设置任务栏显示失败';
+        }
+        if (translations['en']) {
+            translations['en']['autoLaunchDesc'] = 'Auto-start Gotify when you log in to Windows';
+            translations['en']['showInDock'] = 'Show in Taskbar';
+            translations['en']['showInDockDesc'] = 'Display app icon in the Taskbar (stay in tray if off)';
+            translations['en']['showInDockEnabled'] = 'Now showing in Taskbar';
+            translations['en']['showInDockDisabled'] = 'Now hidden from Taskbar (tray only)';
+            translations['en']['showInDockFailed'] = 'Failed to toggle Taskbar visibility';
+        }
+    }
+})();
+
 // 检测系统语言
 function detectLanguage() {
     const saved = localStorage.getItem('lang');
