@@ -3,6 +3,18 @@
 
 一个使用 Rust + Tauri 构建的 Gotify 通知客户端，支持 Windows、macOS 和 Linux。
 
+**📦 以后每次发布只需 3 步
+# 1. 提交改动
+git add -A
+git commit -m "描述你的改动"
+git push origin main
+
+# 2. 打 tag
+git tag v0.x.x -m "版本说明"
+
+# 3. 推送 tag（触发自动构建+发布）
+git push origin v0.x.x**
+
 ## 🚀 最新版本 v0.1.1
 
 ### ✨ 新功能
