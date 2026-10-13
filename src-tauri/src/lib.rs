@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
+use std::sync::atomic::AtomicU64;
 use tauri::{Emitter, Manager, State};
 use tauri::tray::{TrayIconBuilder, TrayIcon};
 use futures_util::{SinkExt, StreamExt};
@@ -24,6 +24,7 @@ mod macos_window {
     #[link(name = "objc", kind = "dylib")]
     extern "C" {
         fn sel_registerName(name: *const c_char) -> *mut c_void;
+        fn objc_getClass(name: *const c_char) -> *mut c_void;
         fn object_getClass(obj: *mut c_void) -> *mut c_void;
         fn class_addMethod(
             cls: *mut c_void,
@@ -177,6 +178,27 @@ mod macos_window {
                 }
             }
 
+            // 消除 macOS 窗口四角黑色直角系统阴影与背景
+            let shadow_sel = sel_registerName(b"setHasShadow:\0".as_ptr() as _);
+            msg_usize(win, shadow_sel, 0); // hasShadow: NO
+
+            let opaque_sel = sel_registerName(b"setOpaque:\0".as_ptr() as _);
+            msg_usize(win, opaque_sel, 0); // isOpaque: NO
+
+            let nscolor_cls = objc_getClass(b"NSColor\0".as_ptr() as _);
+            if !nscolor_cls.is_null() {
+                let clear_sel = sel_registerName(b"clearColor\0".as_ptr() as _);
+                let f_clear: unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void =
+                    std::mem::transmute(objc_msgSend as *const ());
+                let clear_color = f_clear(nscolor_cls, clear_sel);
+                if !clear_color.is_null() {
+                    let bg_sel = sel_registerName(b"setBackgroundColor:\0".as_ptr() as _);
+                    let f_bg: unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) =
+                        std::mem::transmute(objc_msgSend as *const ());
+                    f_bg(win, bg_sel, clear_color);
+                }
+            }
+
             // 桌面小组件需要支持点击交互（按钮、卡片、切换尺寸、缩放手柄）。
             // 在 macOS 中，负数 Level（如 kCGDesktopWindowLevel = -2147483623）属于壁纸层，
             // 访达（Finder）的桌面全屏视图会截获所有鼠标事件，导致 Webview 完全无法接收点击。
@@ -189,6 +211,11 @@ mod macos_window {
             // 256: fullScreenAuxiliary (全屏时作为辅助窗口)
             msg_usize(win, behavior_sel, 1 | 16 | 64 | 256);
 
+            let inval_sel = sel_registerName(b"invalidateShadow\0".as_ptr() as _);
+            let f_inval: unsafe extern "C" fn(*mut c_void, *mut c_void) =
+                std::mem::transmute(objc_msgSend as *const ());
+            f_inval(win, inval_sel);
+
             // orderBack: 沉在底层壁纸上
             let order_back_sel = sel_registerName(b"orderBack:\0".as_ptr() as _);
             let f_order: unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) =
@@ -196,6 +223,16 @@ mod macos_window {
             f_order(win, order_back_sel, std::ptr::null_mut());
         } else {
             FLOATING_WIN_PTR.store(0, Ordering::Relaxed);
+
+            // 恢复系统窗口正常阴影
+            let shadow_sel = sel_registerName(b"setHasShadow:\0".as_ptr() as _);
+            msg_usize(win, shadow_sel, 1); // hasShadow: YES
+
+            let inval_sel = sel_registerName(b"invalidateShadow\0".as_ptr() as _);
+            let f_inval: unsafe extern "C" fn(*mut c_void, *mut c_void) =
+                std::mem::transmute(objc_msgSend as *const ());
+            f_inval(win, inval_sel);
+
             // Normal Window Level = 0
             msg_isize(win, level_sel, 0);
             msg_usize(win, behavior_sel, 0);
@@ -343,7 +380,26 @@ fn load_widget_config_from_file() -> WidgetConfig {
     let config_dir = get_config_dir();
     let config_path = format!("{}/.gotify_widget_config.json", config_dir);
     if let Ok(content) = std::fs::read_to_string(&config_path) {
-        if let Ok(config) = serde_json::from_str::<WidgetConfig>(&content) {
+        if let Ok(mut config) = serde_json::from_str::<WidgetConfig>(&content) {
+            // 防御性过滤：防止历史由于 Retina 缩放倍率混淆导致尺寸失控
+            if config.widget_width < 200 || config.widget_width > 800 {
+                config.widget_width = 340;
+            }
+            if config.widget_height < 140 || config.widget_height > 800 {
+                config.widget_height = 240;
+            }
+            if config.normal_width < 320 || config.normal_width > 1000 {
+                config.normal_width = 380;
+            }
+            if config.normal_height < 400 || config.normal_height > 1000 {
+                config.normal_height = 600;
+            }
+            if let Some(x) = config.normal_x {
+                if x > 4000 || x < -2000 { config.normal_x = None; }
+            }
+            if let Some(y) = config.normal_y {
+                if y > 4000 || y < -2000 { config.normal_y = None; }
+            }
             return config;
         }
     }
@@ -364,6 +420,7 @@ struct AppState {
     tray_icon: Arc<Mutex<Option<TrayIcon>>>,
     /// Windows 贴边防抖令牌：每次 Moved 事件自增，spawn 出去的 snap 任务
     /// 先等待后比对，令牌一致才执行，否则放弃（同一时刻只有最后一次生效）
+    #[allow(dead_code)]
     snap_debounce_token: Arc<AtomicU64>,
 }
 
@@ -727,9 +784,19 @@ async fn save_window_position_auto(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let window = app.get_webview_window("main").unwrap();
+    // 小组件模式下有单独的 widget 配置，不覆盖主窗口的常规位置
+    let widget_cfg = load_widget_config_from_file();
+    if widget_cfg.is_widget_mode {
+        return Ok(());
+    }
+
+    let window = match app.get_webview_window("main") {
+        Some(w) => w,
+        None => return Ok(()),
+    };
     
     // 统一使用 outer_position 获取左上角坐标，outer_size 获取完整窗口大小
+    #[allow(unused_mut)]
     let mut position = window.outer_position().map_err(|e| format!("获取位置失败: {}", e))?;
     let size = window.outer_size().map_err(|e| format!("获取大小失败: {}", e))?;
 
@@ -1340,12 +1407,23 @@ pub fn run() {
             }
             tauri::WindowEvent::Resized(size) => {
                 if window.label() == "main" {
+                    let factor = window.scale_factor().unwrap_or(1.0);
+                    let logical_w = ((size.width as f64) / factor).round() as u32;
+                    let logical_h = ((size.height as f64) / factor).round() as u32;
+
                     let widget_cfg = load_widget_config_from_file();
                     if widget_cfg.is_widget_mode {
-                        let mut cfg = widget_cfg;
-                        if size.width >= 200 && size.height >= 100 {
-                            cfg.widget_width = size.width;
-                            cfg.widget_height = size.height;
+                        if logical_w >= 200 && logical_w <= 800 && logical_h >= 140 && logical_h <= 800 {
+                            let mut cfg = widget_cfg;
+                            cfg.widget_width = logical_w;
+                            cfg.widget_height = logical_h;
+                            let _ = save_widget_config_to_file(&cfg);
+                        }
+                    } else {
+                        if logical_w >= 320 && logical_w <= 1000 && logical_h >= 400 && logical_h <= 1000 {
+                            let mut cfg = widget_cfg;
+                            cfg.normal_width = logical_w;
+                            cfg.normal_height = logical_h;
                             let _ = save_widget_config_to_file(&cfg);
                         }
                     }
@@ -1673,6 +1751,8 @@ async fn set_widget_mode(app: tauri::AppHandle, enable: bool) -> Result<bool, St
     let window = app.get_webview_window("main")
         .ok_or_else(|| "找不到主窗口".to_string())?;
 
+    let factor = window.scale_factor().unwrap_or(1.0);
+
     if enable {
         if !config.is_widget_mode {
             if let Ok(pos) = window.outer_position() {
@@ -1680,8 +1760,10 @@ async fn set_widget_mode(app: tauri::AppHandle, enable: bool) -> Result<bool, St
                 config.normal_y = Some(pos.y);
             }
             if let Ok(size) = window.inner_size() {
-                config.normal_width = size.width;
-                config.normal_height = size.height;
+                let w = ((size.width as f64) / factor).round() as u32;
+                let h = ((size.height as f64) / factor).round() as u32;
+                config.normal_width = w.clamp(320, 1000);
+                config.normal_height = h.clamp(400, 1000);
             }
         }
         config.is_widget_mode = true;
@@ -1690,17 +1772,27 @@ async fn set_widget_mode(app: tauri::AppHandle, enable: bool) -> Result<bool, St
         let _ = window.set_decorations(false);
         let _ = window.set_always_on_top(false);
 
-        let target_w = if config.widget_width > 0 { config.widget_width } else { 320 };
-        let target_h = if config.widget_height > 0 { config.widget_height } else { 220 };
+        let target_w = if config.widget_width >= 200 && config.widget_width <= 800 {
+            config.widget_width
+        } else {
+            340
+        };
+        let target_h = if config.widget_height >= 140 && config.widget_height <= 800 {
+            config.widget_height
+        } else {
+            240
+        };
         let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
             width: target_w as f64,
             height: target_h as f64,
         }));
 
         if let (Some(wx), Some(wy)) = (config.widget_x, config.widget_y) {
+            let safe_x = if wx > 10000 || wx < -2000 { 100 } else { wx };
+            let safe_y = if wy > 10000 || wy < -2000 { 100 } else { wy };
             let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
-                x: wx,
-                y: wy,
+                x: safe_x,
+                y: safe_y,
             }));
         }
 
@@ -1719,6 +1811,12 @@ async fn set_widget_mode(app: tauri::AppHandle, enable: bool) -> Result<bool, St
                 config.widget_x = Some(pos.x);
                 config.widget_y = Some(pos.y);
             }
+            if let Ok(size) = window.inner_size() {
+                let w = ((size.width as f64) / factor).round() as u32;
+                let h = ((size.height as f64) / factor).round() as u32;
+                config.widget_width = w.clamp(200, 800);
+                config.widget_height = h.clamp(140, 800);
+            }
         }
         config.is_widget_mode = false;
         let _ = save_widget_config_to_file(&config);
@@ -1735,17 +1833,27 @@ async fn set_widget_mode(app: tauri::AppHandle, enable: bool) -> Result<bool, St
 
         let _ = window.set_decorations(true);
 
-        let target_w = if config.normal_width > 0 { config.normal_width } else { 380 };
-        let target_h = if config.normal_height > 0 { config.normal_height } else { 600 };
+        let target_w = if config.normal_width >= 320 && config.normal_width <= 1000 {
+            config.normal_width
+        } else {
+            380
+        };
+        let target_h = if config.normal_height >= 400 && config.normal_height <= 1000 {
+            config.normal_height
+        } else {
+            600
+        };
         let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
             width: target_w as f64,
             height: target_h as f64,
         }));
 
         if let (Some(nx), Some(ny)) = (config.normal_x, config.normal_y) {
+            let safe_x = if nx > 10000 || nx < -2000 { 100 } else { nx };
+            let safe_y = if ny > 10000 || ny < -2000 { 100 } else { ny };
             let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
-                x: nx,
-                y: ny,
+                x: safe_x,
+                y: safe_y,
             }));
         }
 
@@ -1780,8 +1888,8 @@ async fn toggle_widget_mode(app: tauri::AppHandle) -> Result<bool, String> {
 
 #[tauri::command]
 async fn set_widget_size(app: tauri::AppHandle, width: u32, height: u32) -> Result<WidgetConfig, String> {
-    let w = width.clamp(240, 900);
-    let h = height.clamp(140, 900);
+    let w = width.clamp(240, 800);
+    let h = height.clamp(140, 800);
 
     let window = app.get_webview_window("main")
         .ok_or_else(|| "找不到主窗口".to_string())?;

@@ -973,15 +973,16 @@
             width: 100%;
             height: 100%;
             border-radius: 26px !important;
-            /* 默认苹果深色半透液态玻璃质感（参见原生电池挂件） */
+            /* 默认苹果深色半透液态玻璃质感（参见原生挂件） */
             background: rgba(22, 28, 42, var(--widget-opacity, 0.70)) !important;
             backdrop-filter: blur(48px) saturate(210%) brightness(102%) !important;
             -webkit-backdrop-filter: blur(48px) saturate(210%) brightness(102%) !important;
-            border: 1px solid rgba(255, 255, 255, 0.16) !important;
+            border: 1px solid rgba(255, 255, 255, 0.18) !important;
+            /* 严禁向外投影（外部阴影会在窗口四角被裁剪成直角黑色毛刺），纯靠精雕细琢的内发光与微边框呈现浮雕玻璃质感 */
             box-shadow:
                 inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.32),
-                inset 0 0 0 0.5px rgba(255, 255, 255, 0.08),
-                0 18px 45px rgba(0, 0, 0, 0.45) !important;
+                inset 0 -1px 1px 0 rgba(0, 0, 0, 0.25),
+                inset 0 0 0 0.5px rgba(255, 255, 255, 0.08) !important;
             display: flex !important;
             flex-direction: column !important;
             overflow: hidden !important;
@@ -990,7 +991,7 @@
             user-select: none;
             -webkit-user-select: none;
             pointer-events: auto !important;
-            transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+            transition: background 0.25s ease, border-color 0.25s ease;
             cursor: grab;
         }
 
@@ -1000,8 +1001,8 @@
             border: 1px solid rgba(255, 255, 255, 0.65) !important;
             box-shadow:
                 inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.85),
-                inset 0 0 0 0.5px rgba(255, 255, 255, 0.35),
-                0 14px 36px rgba(0, 0, 0, 0.12) !important;
+                inset 0 -1px 1px 0 rgba(0, 0, 0, 0.05),
+                inset 0 0 0 0.5px rgba(255, 255, 255, 0.35) !important;
             color: #1a1a2e !important;
         }
 
@@ -1371,7 +1372,7 @@
 
         .widget-item {
             background: rgba(255, 255, 255, 0.55);
-            border: 1px solid rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(0, 0, 0, 0.06);
             border-radius: 12px;
             padding: 8px 10px 8px 12px;
             font-size: 11.5px;
@@ -1379,7 +1380,7 @@
             transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             display: flex;
             flex-direction: column;
-            gap: 3px;
+            gap: 4px;
             position: relative;
             overflow: hidden;
             -webkit-app-region: no-drag !important;
@@ -1387,8 +1388,8 @@
         }
 
         [data-theme="dark"] .widget-item {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.09);
         }
 
         .widget-item:hover {
@@ -1399,9 +1400,27 @@
         }
 
         [data-theme="dark"] .widget-item:hover {
-            background: rgba(255, 255, 255, 0.09);
-            border-color: rgba(255, 255, 255, 0.16);
+            background: rgba(255, 255, 255, 0.10);
+            border-color: rgba(255, 255, 255, 0.18);
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+        }
+
+        .widget-item.pinned {
+            border-left: 3px solid #6366f1 !important;
+        }
+
+        .widget-item.expanded {
+            background: rgba(255, 255, 255, 0.95) !important;
+            border-color: rgba(99, 102, 241, 0.4) !important;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08) !important;
+            cursor: default;
+        }
+
+        [data-theme="dark"] .widget-item.expanded {
+            background: rgba(255, 255, 255, 0.12) !important;
+            border-color: rgba(129, 140, 248, 0.45) !important;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35) !important;
+            cursor: default;
         }
 
         /* 优先级状态指示竖条 */
@@ -1442,7 +1461,17 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-            max-width: 75%;
+            max-width: 70%;
+        }
+
+        .widget-item-meta {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .widget-pin-icon {
+            font-size: 10px;
         }
 
         .widget-item-time {
@@ -1453,9 +1482,9 @@
 
         .widget-item-desc {
             padding-left: 2px;
-            opacity: 0.78;
+            opacity: 0.85;
             font-size: 11px;
-            line-height: 1.4;
+            line-height: 1.45;
             overflow: hidden;
             text-overflow: ellipsis;
             display: -webkit-box;
@@ -1464,26 +1493,56 @@
             word-break: break-word;
         }
 
-        /* 右下角自由缩放手柄 */
-        .widget-resize-handle {
-            position: absolute;
-            bottom: 3px;
-            right: 3px;
-            width: 14px;
-            height: 14px;
-            cursor: se-resize;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            opacity: 0.35;
-            transition: opacity 0.2s ease;
-            z-index: 100;
-            -webkit-app-region: no-drag !important;
-            pointer-events: auto !important;
+        .widget-item.expanded .widget-item-desc {
+            display: block !important;
+            -webkit-line-clamp: unset !important;
+            max-height: none !important;
+            user-select: text;
+            -webkit-user-select: text;
+            cursor: text;
+            margin-top: 2px;
         }
 
-        .widget-resize-handle:hover {
-            opacity: 0.85;
+        .widget-item.expanded .widget-item-desc a {
+            color: #6366f1;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+
+        .widget-item-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px solid rgba(128, 128, 128, 0.15);
+        }
+
+        .widget-mini-btn {
+            background: rgba(128, 128, 128, 0.12);
+            border: none;
+            border-radius: 5px;
+            padding: 2.5px 7px;
+            font-size: 10px;
+            font-weight: 500;
+            color: inherit;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            opacity: 0.8;
+            transition: all 0.15s ease;
+            -webkit-app-region: no-drag !important;
+        }
+
+        .widget-mini-btn:hover {
+            opacity: 1;
+            background: rgba(128, 128, 128, 0.25);
+        }
+
+        .widget-mini-btn.delete:hover {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
         }
     </style>
 </head>
@@ -1616,14 +1675,6 @@
                         </svg>
                     </div>
                     <div class="widget-empty-text">常驻桌面 · 暂无新通知</div>
-                </div>
-            </div>
-            <!-- 右下角自由缩放拖动手柄 -->
-            <div id="widgetResizeHandle" class="widget-resize-handle" title="按住拖拽调整小组件大小" onmousedown="event.stopPropagation()">
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                    <line x1="8.5" y1="2.5" x2="2.5" y2="8.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-                    <line x1="8.5" y1="5.5" x2="5.5" y2="8.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-                </svg>
             </div>
         </div>
 
@@ -1804,10 +1855,10 @@
         // 桌面小组件窗口拖拽处理
         function onWidgetMouseDown(event) {
             if (!event || event.button !== 0) return;
-            // 排除按钮、控制手柄、输入滑块、透明度弹窗以及点击卡片
+            // 排除按钮、输入滑块、透明度弹窗以及点击卡片
             if (event.target.closest('.size-pill') ||
                 event.target.closest('.widget-btn') ||
-                event.target.closest('.widget-resize-handle') ||
+                event.target.closest('.widget-mini-btn') ||
                 event.target.closest('.widget-actions') ||
                 event.target.closest('#widgetOpacityPopover') ||
                 event.target.closest('.widget-item')
@@ -1914,7 +1965,6 @@
 
         async function initDesktopWidgetMode() {
             try {
-                initWidgetResize();
                 if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
                     const cfg = await window.__TAURI_INTERNALS__.invoke('get_widget_config');
                     if (cfg && typeof cfg.opacity === 'number') {
@@ -1951,74 +2001,16 @@
             }
         }
 
-        // 右下角自由缩放逻辑
-        let isResizingWidget = false;
-        let resizeStartX = 0;
-        let resizeStartY = 0;
-        let resizeStartWidth = 0;
-        let resizeStartHeight = 0;
-        let resizeRafId = null;
-
-        function initWidgetResize() {
-            const handle = document.getElementById('widgetResizeHandle');
-            if (!handle) return;
-
-            handle.addEventListener('mousedown', async (e) => {
-                if (e.button !== 0) return;
-                e.preventDefault();
-                e.stopPropagation();
-
-                isResizingWidget = true;
-                resizeStartX = e.screenX;
-                resizeStartY = e.screenY;
-
-                try {
-                    if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
-                        const cfg = await window.__TAURI_INTERNALS__.invoke('get_widget_config');
-                        resizeStartWidth = cfg.widget_width || window.innerWidth;
-                        resizeStartHeight = cfg.widget_height || window.innerHeight;
-                    } else {
-                        resizeStartWidth = window.innerWidth;
-                        resizeStartHeight = window.innerHeight;
-                    }
-                } catch {
-                    resizeStartWidth = window.innerWidth;
-                    resizeStartHeight = window.innerHeight;
-                }
-
-                document.addEventListener('mousemove', onWidgetResizeMouseMove);
-                document.addEventListener('mouseup', onWidgetResizeMouseUp);
-            });
-        }
-
-        function onWidgetResizeMouseMove(e) {
-            if (!isResizingWidget) return;
-            const deltaX = e.screenX - resizeStartX;
-            const deltaY = e.screenY - resizeStartY;
-
-            const newW = Math.max(240, Math.min(900, Math.round(resizeStartWidth + deltaX)));
-            const newH = Math.max(140, Math.min(900, Math.round(resizeStartHeight + deltaY)));
-
-            // 自由调节时清除预设尺寸的活跃标记
-            document.querySelectorAll('.size-pill').forEach(el => el.classList.remove('active'));
-
-            if (resizeRafId) cancelAnimationFrame(resizeRafId);
-            resizeRafId = requestAnimationFrame(async () => {
-                try {
-                    if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
-                        await window.__TAURI_INTERNALS__.invoke('set_widget_size', { width: newW, height: newH });
-                    }
-                } catch (err) {
-                    console.warn('调整尺寸失败:', err);
-                }
-            });
-        }
-
-        function onWidgetResizeMouseUp() {
-            if (!isResizingWidget) return;
-            isResizingWidget = false;
-            document.removeEventListener('mousemove', onWidgetResizeMouseMove);
-            document.removeEventListener('mouseup', onWidgetResizeMouseUp);
+        function copyNotificationText(id, event) {
+            if (event) event.stopPropagation();
+            const notif = notifications.find(n => n.id === id);
+            if (notif && notif.message) {
+                navigator.clipboard.writeText(notif.message).then(() => {
+                    console.log('✅ 已复制通知内容');
+                }).catch(err => {
+                    console.warn('复制失败:', err);
+                });
+            }
         }
 
         function renderWidgetNotifications() {
@@ -2050,18 +2042,44 @@
                 return;
             }
 
-            // 展示所有消息（容器自带弹性滚动条，支持自适应尺寸高度）
-            listEl.innerHTML = notifications.map(notif => {
+            // 按置顶与时间排序，体验与悬浮/通知列表保持完全一致
+            const sortedNotifs = [...notifications].sort((a, b) => {
+                if (a.pinned && !b.pinned) return -1;
+                if (!a.pinned && b.pinned) return 1;
+                return new Date(b.date) - new Date(a.date);
+            });
+
+            listEl.innerHTML = sortedNotifs.map(notif => {
                 const timeAgo = formatTime(notif.date);
                 const priorityClass = getPriorityClass(notif.priority);
-                const cleanMsg = (notif.message || '').replace(/<[^>]*>?/gm, '');
+                const pinnedClass = notif.pinned ? 'pinned' : '';
+                const expandedClass = notif.expanded ? 'expanded' : '';
+
                 return `
-                    <div class="widget-item priority-${priorityClass}" onclick="toggleDesktopWidgetMode(event)" title="双击展开主界面">
+                    <div class="widget-item priority-${priorityClass} ${pinnedClass} ${expandedClass}" onclick="toggleExpand(${notif.id})" title="${notif.expanded ? '点击收起详情' : '点击展开查看详情'}">
                         <div class="widget-item-header">
                             <span class="widget-item-title">${escapeHtml(notif.title || 'Gotify 通知')}</span>
-                            <span class="widget-item-time">${timeAgo}</span>
+                            <div class="widget-item-meta">
+                                ${notif.pinned ? '<span class="widget-pin-icon" title="已置顶">📌</span>' : ''}
+                                <span class="widget-item-time">${timeAgo}</span>
+                            </div>
                         </div>
-                        <div class="widget-item-desc">${escapeHtml(cleanMsg)}</div>
+                        <div class="widget-item-desc" id="widget-msg-${notif.id}">
+                            ${notif.expanded ? renderMessage(notif) : escapeHtml((notif.message || '').replace(/<[^>]*>?/gm, ''))}
+                        </div>
+                        ${notif.expanded ? `
+                            <div class="widget-item-actions" onclick="event.stopPropagation()">
+                                <button class="widget-mini-btn" onclick="togglePin(${notif.id}, event)" title="${notif.pinned ? '取消置顶' : '置顶'}">
+                                    ${notif.pinned ? '📍 取消置顶' : '📌 置顶'}
+                                </button>
+                                <button class="widget-mini-btn" onclick="copyNotificationText(${notif.id}, event)" title="复制消息内容">
+                                    📋 复制
+                                </button>
+                                <button class="widget-mini-btn delete" onclick="deleteNotification(${notif.id}, event)" title="删除此通知">
+                                    🗑️ 删除
+                                </button>
+                            </div>
+                        ` : ''}
                     </div>
                 `;
             }).join('');
@@ -2880,6 +2898,7 @@
 
         async function saveWindowPosition() {
             if (typeof window.__TAURI_INTERNALS__ === 'undefined') return;
+            if (isDesktopWidgetMode) return;
 
             try {
                 const { invoke } = window.__TAURI_INTERNALS__;
