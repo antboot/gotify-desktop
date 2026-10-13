@@ -303,6 +303,10 @@ struct WindowPosition {
     height: u32,
 }
 
+fn default_widget_opacity() -> f64 {
+    0.45
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct WidgetConfig {
     pub is_widget_mode: bool,
@@ -314,6 +318,8 @@ pub struct WidgetConfig {
     pub normal_y: Option<i32>,
     pub normal_width: u32,
     pub normal_height: u32,
+    #[serde(default = "default_widget_opacity")]
+    pub opacity: f64,
 }
 
 impl Default for WidgetConfig {
@@ -328,6 +334,7 @@ impl Default for WidgetConfig {
             normal_y: None,
             normal_width: 380,
             normal_height: 600,
+            opacity: 0.45,
         }
     }
 }
@@ -1389,6 +1396,7 @@ pub fn run() {
             get_widget_config,
             save_widget_position,
             set_widget_size,
+            set_widget_opacity,
             set_widget_mode,
             toggle_widget_mode,
         ])
@@ -1789,5 +1797,14 @@ async fn set_widget_size(app: tauri::AppHandle, width: u32, height: u32) -> Resu
     save_widget_config_to_file(&config)?;
 
     Ok(config)
+}
+
+#[tauri::command]
+async fn set_widget_opacity(opacity: f64) -> Result<f64, String> {
+    let clamped = opacity.clamp(0.05, 1.0);
+    let mut config = load_widget_config_from_file();
+    config.opacity = clamped;
+    save_widget_config_to_file(&config)?;
+    Ok(clamped)
 }
 

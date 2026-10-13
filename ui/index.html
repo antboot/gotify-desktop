@@ -967,15 +967,31 @@
         }
 
         .desktop-widget-card {
+        :root {
+            --widget-opacity: 0.45;
+        }
+
+        .desktop-widget-card {
             position: relative;
             width: 100%;
             height: 100%;
-            background: rgba(255, 255, 255, 0.75);
-            backdrop-filter: blur(40px) saturate(190%);
-            -webkit-backdrop-filter: blur(40px) saturate(190%);
-            border: 1px solid rgba(255, 255, 255, 0.65);
-            border-radius: 18px;
-            box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.8), 0 12px 32px rgba(0, 0, 0, 0.12);
+            /* 苹果原生连续 Squircle 圆角 */
+            border-radius: 24px;
+            /* 苹果液态玻璃层叠渐变：顶部微光反射 + 超高通透底色 */
+            background: linear-gradient(135deg,
+                rgba(255, 255, 255, calc(var(--widget-opacity, 0.45) * 0.45)) 0%,
+                rgba(255, 255, 255, calc(var(--widget-opacity, 0.45) * 0.12)) 35%,
+                rgba(255, 255, 255, 0.04) 100%),
+                rgba(242, 245, 252, var(--widget-opacity, 0.45));
+            backdrop-filter: blur(48px) saturate(215%) brightness(104%);
+            -webkit-backdrop-filter: blur(48px) saturate(215%) brightness(104%);
+            /* 双层超细高光边框 */
+            border: 1px solid rgba(255, 255, 255, 0.55);
+            /* 顶部内切削镜面反光与柔和阴影 */
+            box-shadow:
+                inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.75),
+                inset 0 0 0 0.5px rgba(255, 255, 255, 0.25),
+                0 16px 40px rgba(0, 0, 0, 0.15);
             display: flex;
             flex-direction: column;
             overflow: hidden;
@@ -984,62 +1000,74 @@
             user-select: none;
             -webkit-user-select: none;
             pointer-events: auto !important;
+            transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+            cursor: grab;
         }
 
         [data-theme="dark"] .desktop-widget-card {
-            background: rgba(24, 28, 38, 0.78);
-            backdrop-filter: blur(45px) saturate(200%) contrast(105%);
-            -webkit-backdrop-filter: blur(45px) saturate(200%) contrast(105%);
-            border: 1px solid rgba(255, 255, 255, 0.14);
-            box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.16), 0 16px 40px rgba(0, 0, 0, 0.45);
+            background: linear-gradient(135deg,
+                rgba(255, 255, 255, calc(var(--widget-opacity, 0.45) * 0.22)) 0%,
+                rgba(255, 255, 255, calc(var(--widget-opacity, 0.45) * 0.04)) 40%,
+                rgba(0, 0, 0, 0.15) 100%),
+                rgba(15, 20, 32, var(--widget-opacity, 0.45));
+            backdrop-filter: blur(52px) saturate(220%) brightness(102%);
+            -webkit-backdrop-filter: blur(52px) saturate(220%) brightness(102%);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow:
+                inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.35),
+                inset 0 0 0 0.5px rgba(255, 255, 255, 0.1),
+                0 20px 48px rgba(0, 0, 0, 0.5);
             color: #f3f4f6;
         }
 
         .widget-header {
-            height: 38px;
-            padding: 0 12px 0 14px;
+            height: 40px;
+            padding: 0 12px 0 16px;
             display: flex;
             align-items: center;
             justify-content: space-between;
             border-bottom: 1px solid rgba(0, 0, 0, 0.05);
             flex-shrink: 0;
             pointer-events: auto !important;
+            cursor: grab;
+            -webkit-app-region: drag;
         }
 
         [data-theme="dark"] .widget-header {
-            border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
         }
 
         .widget-status {
             display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 13px;
+            font-size: 13.5px;
             font-weight: 600;
             letter-spacing: -0.2px;
             -webkit-app-region: drag;
             cursor: grab;
+            user-select: none;
         }
 
         .widget-indicator {
-            width: 7px;
-            height: 7px;
+            width: 7.5px;
+            height: 7.5px;
             border-radius: 50%;
             background: #10b981;
-            box-shadow: 0 0 8px rgba(16, 185, 129, 0.7);
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.8);
             display: inline-block;
             transition: all 0.3s ease;
         }
 
         .widget-indicator.offline {
             background: #ef4444;
-            box-shadow: 0 0 8px rgba(239, 68, 68, 0.7);
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
         }
 
         .widget-badge {
-            background: rgba(99, 102, 241, 0.15);
+            background: rgba(99, 102, 241, 0.18);
             color: #6366f1;
-            border: 1px solid rgba(99, 102, 241, 0.3);
+            border: 1px solid rgba(99, 102, 241, 0.35);
             font-size: 10.5px;
             font-weight: 600;
             padding: 1px 7px;
@@ -1048,9 +1076,9 @@
         }
 
         [data-theme="dark"] .widget-badge {
-            background: rgba(129, 140, 248, 0.2);
+            background: rgba(129, 140, 248, 0.22);
             color: #a5b4fc;
-            border: 1px solid rgba(129, 140, 248, 0.35);
+            border: 1px solid rgba(129, 140, 248, 0.38);
         }
 
         .widget-badge.hidden {
@@ -1070,16 +1098,18 @@
             display: flex;
             align-items: center;
             background: rgba(0, 0, 0, 0.05);
-            padding: 2px;
-            border-radius: 6px;
-            margin-right: 4px;
+            padding: 2.5px;
+            border-radius: 7px;
+            margin-right: 3px;
             gap: 2px;
+            border: 0.5px solid rgba(0, 0, 0, 0.04);
             -webkit-app-region: no-drag !important;
             pointer-events: auto !important;
         }
 
         [data-theme="dark"] .widget-size-toggles {
-            background: rgba(255, 255, 255, 0.06);
+            background: rgba(255, 255, 255, 0.07);
+            border: 0.5px solid rgba(255, 255, 255, 0.08);
         }
 
         .size-pill {
@@ -1087,29 +1117,30 @@
             border: none;
             font-size: 10px;
             font-weight: 600;
-            padding: 2px 6px;
-            border-radius: 4px;
+            padding: 2px 6.5px;
+            border-radius: 5px;
             color: inherit;
             opacity: 0.55;
             cursor: pointer;
-            transition: all 0.15s ease;
+            transition: all 0.16s cubic-bezier(0.4, 0, 0.2, 1);
             -webkit-app-region: no-drag !important;
             pointer-events: auto !important;
         }
 
         .size-pill:hover {
             opacity: 0.9;
+            background: rgba(255, 255, 255, 0.12);
         }
 
         .size-pill.active {
             opacity: 1;
             background: rgba(255, 255, 255, 0.85);
             color: #111827;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
         }
 
         [data-theme="dark"] .size-pill.active {
-            background: rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.22);
             color: #ffffff;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
         }
@@ -1117,15 +1148,15 @@
         .widget-btn {
             background: transparent;
             border: none;
-            width: 24px;
-            height: 24px;
-            border-radius: 6px;
+            width: 25px;
+            height: 25px;
+            border-radius: 7px;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
             color: inherit;
-            opacity: 0.6;
+            opacity: 0.65;
             transition: all 0.15s ease;
             -webkit-app-region: no-drag !important;
             pointer-events: auto !important;
@@ -1133,11 +1164,148 @@
 
         .widget-btn:hover {
             opacity: 1;
-            background: rgba(0, 0, 0, 0.07);
+            background: rgba(0, 0, 0, 0.08);
         }
 
         [data-theme="dark"] .widget-btn:hover {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .widget-btn.active {
+            opacity: 1;
+            background: rgba(99, 102, 241, 0.2);
+            color: #6366f1;
+        }
+
+        [data-theme="dark"] .widget-btn.active {
+            background: rgba(129, 140, 248, 0.25);
+            color: #a5b4fc;
+        }
+
+        /* 苹果液态玻璃风格透明度调节弹窗 */
+        .widget-opacity-popover {
+            position: absolute;
+            top: 45px;
+            right: 12px;
+            z-index: 1000;
+            width: 200px;
+            padding: 12px 14px;
+            border-radius: 16px;
+            background: rgba(28, 34, 48, 0.94);
+            backdrop-filter: blur(30px) saturate(190%);
+            -webkit-backdrop-filter: blur(30px) saturate(190%);
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+            color: #f3f4f6;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            -webkit-app-region: no-drag !important;
+            pointer-events: auto !important;
+            animation: popoverFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        [data-theme="light"] .widget-opacity-popover {
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.12), inset 0 1px 1px rgba(255, 255, 255, 0.9);
+            color: #1a1a2e;
+        }
+
+        @keyframes popoverFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-6px) scale(0.96);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .popover-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 11.5px;
+            font-weight: 600;
+        }
+
+        .opacity-val-badge {
+            font-size: 11px;
+            font-weight: 700;
+            color: #6366f1;
+            background: rgba(99, 102, 241, 0.15);
+            padding: 1px 6px;
+            border-radius: 6px;
+        }
+
+        [data-theme="dark"] .opacity-val-badge {
+            color: #a5b4fc;
+            background: rgba(129, 140, 248, 0.2);
+        }
+
+        .popover-slider-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .popover-slider-row input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 4px;
+            border-radius: 2px;
+            background: rgba(128, 128, 128, 0.3);
+            outline: none;
+            cursor: pointer;
+        }
+
+        .popover-slider-row input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #ffffff;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+            cursor: pointer;
+            transition: transform 0.1s ease;
+        }
+
+        .popover-slider-row input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.15);
+        }
+
+        .popover-presets {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5px;
+        }
+
+        .preset-chip {
+            background: rgba(128, 128, 128, 0.1);
+            border: 0.5px solid rgba(128, 128, 128, 0.15);
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 4px 6px;
+            color: inherit;
+            opacity: 0.75;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            text-align: center;
+        }
+
+        .preset-chip:hover {
+            opacity: 1;
+            background: rgba(128, 128, 128, 0.2);
+        }
+
+        .preset-chip.active {
+            background: #6366f1;
+            color: white;
+            opacity: 1;
+            border-color: #6366f1;
         }
 
         .widget-body {
@@ -1165,21 +1333,47 @@
             background: rgba(255, 255, 255, 0.15);
         }
 
+        /* 苹果极简空状态设计 */
         .widget-empty {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             height: 100%;
-            opacity: 0.45;
-            font-size: 11.5px;
-            gap: 6px;
-            padding: 24px 0;
+            gap: 12px;
+            padding: 20px 0;
             text-align: center;
+            user-select: none;
+            -webkit-user-select: none;
+            cursor: grab;
         }
 
-        .widget-empty-icon {
-            font-size: 22px;
+        .widget-empty-icon-wrap {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.02) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.25), 0 4px 16px rgba(0, 0, 0, 0.2);
+            color: inherit;
+            opacity: 0.7;
+            transition: all 0.3s ease;
+        }
+
+        [data-theme="light"] .widget-empty-icon-wrap {
+            background: radial-gradient(circle, rgba(0, 0, 0, 0.04) 0%, rgba(0, 0, 0, 0.01) 100%);
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.8), 0 4px 12px rgba(0, 0, 0, 0.04);
+        }
+
+        .widget-empty-text {
+            font-size: 12px;
+            font-weight: 500;
+            letter-spacing: -0.1px;
+            opacity: 0.55;
         }
 
         .widget-item {
@@ -1366,8 +1560,8 @@
         </div>
 
         <!-- 桌面小组件模式视图 (Desktop Widget View) -->
-        <div id="desktopWidgetView" class="desktop-widget-card" style="display: none;">
-            <div class="widget-header">
+        <div id="desktopWidgetView" class="desktop-widget-card" style="display: none;" onmousedown="onWidgetMouseDown(event)">
+            <div class="widget-header" onmousedown="onWidgetMouseDown(event)">
                 <div class="widget-status" data-tauri-drag-region>
                     <span id="widgetStatusDot" class="widget-indicator"></span>
                     <span class="widget-title">Gotify</span>
@@ -1379,6 +1573,13 @@
                         <button id="pillSizeM" class="size-pill active" onclick="changeWidgetPresetSize('m')" title="中尺寸 (340x240)">M</button>
                         <button id="pillSizeL" class="size-pill" onclick="changeWidgetPresetSize('l')" title="大尺寸 (420x360)">L</button>
                     </div>
+                    <!-- 玻璃透明度调节按钮 -->
+                    <button id="widgetOpacityBtn" class="widget-btn" onclick="toggleOpacityPopover(event)" title="调整玻璃透明度" onmousedown="event.stopPropagation()">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M12 2a10 10 0 0 1 0 20z" fill="currentColor"></path>
+                        </svg>
+                    </button>
                     <button class="widget-btn" onclick="clearAllNotifications()" title="清除通知" onmousedown="event.stopPropagation()">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="3 6 5 6 21 6"></polyline>
@@ -1395,14 +1596,37 @@
                     </button>
                 </div>
             </div>
+
+            <!-- 透明度无极滑块与预设弹窗 -->
+            <div id="widgetOpacityPopover" class="widget-opacity-popover" style="display: none;" onmousedown="event.stopPropagation()">
+                <div class="popover-header">
+                    <span class="popover-title">液态玻璃透明度</span>
+                    <span id="opacityValLabel" class="opacity-val-badge">45%</span>
+                </div>
+                <div class="popover-slider-row">
+                    <input type="range" id="widgetOpacitySlider" min="10" max="100" value="45" oninput="onOpacitySliderInput(event)" onchange="onOpacitySliderChange(event)" />
+                </div>
+                <div class="popover-presets">
+                    <button class="preset-chip" onclick="applyOpacityPreset(0.20)">20% 超透</button>
+                    <button class="preset-chip active" onclick="applyOpacityPreset(0.45)">45% 原液</button>
+                    <button class="preset-chip" onclick="applyOpacityPreset(0.70)">70% 磨砂</button>
+                    <button class="preset-chip" onclick="applyOpacityPreset(0.95)">95% 实感</button>
+                </div>
+            </div>
+
             <div id="widgetMessageList" class="widget-body">
-                <div class="widget-empty">
-                    <div class="widget-empty-icon">🔔</div>
-                    <div class="widget-empty-text">桌面常驻中 · 暂无新消息</div>
+                <div class="widget-empty" onmousedown="onWidgetMouseDown(event)">
+                    <div class="widget-empty-icon-wrap" onmousedown="onWidgetMouseDown(event)">
+                        <svg class="liquid-bell-icon" width="26" height="26" viewBox="0 0 24 24" fill="none">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                    <div class="widget-empty-text">常驻桌面 · 暂无新通知</div>
                 </div>
             </div>
             <!-- 右下角自由缩放拖动手柄 -->
-            <div id="widgetResizeHandle" class="widget-resize-handle" title="按住拖拽调整小组件大小">
+            <div id="widgetResizeHandle" class="widget-resize-handle" title="按住拖拽调整小组件大小" onmousedown="event.stopPropagation()">
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                     <line x1="8.5" y1="2.5" x2="2.5" y2="8.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
                     <line x1="8.5" y1="5.5" x2="5.5" y2="8.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
@@ -1414,6 +1638,9 @@
         <div id="contextMenu" class="context-menu">
             <div class="context-menu-item" onclick="toggleDesktopWidgetMode(event)">
                 <span id="contextMenuWidgetIcon">🖥️</span> <span id="contextMenuWidgetText" data-i18n="desktopWidget">钉在桌面小组件</span>
+            </div>
+            <div class="context-menu-item" onclick="cycleWidgetOpacity(event)">
+                <span>💧</span> <span>调节透明度</span>
             </div>
             <div class="context-menu-item" onclick="toggleWindowAlwaysOnTop(event)">
                 <span id="contextMenuPinIcon">📌</span> <span id="contextMenuPinText" data-i18n="pinWindow">窗口置顶</span>
@@ -1581,13 +1808,127 @@
             }
         }
 
+        // 桌面小组件窗口拖拽处理
+        function onWidgetMouseDown(event) {
+            if (!event || event.button !== 0) return;
+            // 排除按钮、控制手柄、输入滑块、透明度弹窗以及点击卡片
+            if (event.target.closest('.size-pill') ||
+                event.target.closest('.widget-btn') ||
+                event.target.closest('.widget-resize-handle') ||
+                event.target.closest('.widget-actions') ||
+                event.target.closest('#widgetOpacityPopover') ||
+                event.target.closest('.widget-item')
+            ) {
+                return;
+            }
+            try {
+                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                    window.__TAURI_INTERNALS__.invoke('start_dragging_window');
+                }
+            } catch (e) {
+                console.warn('拖动小组件失败:', e);
+            }
+        }
+
+        // 透明度管理
+        let currentWidgetOpacity = 0.45;
+
+        function setWidgetOpacity(opacity, persist = true) {
+            const val = Math.max(0.05, Math.min(1.0, parseFloat(opacity) || 0.45));
+            currentWidgetOpacity = val;
+            document.documentElement.style.setProperty('--widget-opacity', val.toString());
+
+            const percent = Math.round(val * 100);
+            const label = document.getElementById('opacityValLabel');
+            if (label) label.textContent = `${percent}%`;
+
+            const slider = document.getElementById('widgetOpacitySlider');
+            if (slider) slider.value = percent;
+
+            // 更新预设 chip 激活态
+            document.querySelectorAll('.preset-chip').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            const matchedChip = Array.from(document.querySelectorAll('.preset-chip')).find(btn => {
+                return btn.textContent.includes(`${percent}%`);
+            });
+            if (matchedChip) matchedChip.classList.add('active');
+
+            if (persist && typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                window.__TAURI_INTERNALS__.invoke('set_widget_opacity', { opacity: val }).catch(err => {
+                    console.warn('保存透明度失败:', err);
+                });
+            }
+        }
+
+        function toggleOpacityPopover(event) {
+            if (event) event.stopPropagation();
+            const popover = document.getElementById('widgetOpacityPopover');
+            const btn = document.getElementById('widgetOpacityBtn');
+            if (!popover) return;
+            const isVisible = popover.style.display !== 'none';
+            if (isVisible) {
+                popover.style.display = 'none';
+                if (btn) btn.classList.remove('active');
+            } else {
+                popover.style.display = 'flex';
+                if (btn) btn.classList.add('active');
+            }
+        }
+
+        function onOpacitySliderInput(event) {
+            const percent = parseInt(event.target.value, 10) || 45;
+            setWidgetOpacity(percent / 100, false);
+        }
+
+        function onOpacitySliderChange(event) {
+            const percent = parseInt(event.target.value, 10) || 45;
+            setWidgetOpacity(percent / 100, true);
+        }
+
+        function applyOpacityPreset(val) {
+            setWidgetOpacity(val, true);
+        }
+
+        // 右键菜单循环调节透明度
+        function cycleWidgetOpacity(event) {
+            if (event) event.stopPropagation();
+            const menu = document.getElementById('contextMenu');
+            if (menu) menu.style.display = 'none';
+
+            const levels = [0.20, 0.45, 0.70, 0.95];
+            let nextIndex = 0;
+            for (let i = 0; i < levels.length; i++) {
+                if (Math.abs(currentWidgetOpacity - levels[i]) < 0.08) {
+                    nextIndex = (i + 1) % levels.length;
+                    break;
+                }
+            }
+            setWidgetOpacity(levels[nextIndex], true);
+        }
+
+        // 点击页面任意外部关闭透明度弹窗
+        window.addEventListener('mousedown', (e) => {
+            const popover = document.getElementById('widgetOpacityPopover');
+            const btn = document.getElementById('widgetOpacityBtn');
+            if (popover && popover.style.display !== 'none') {
+                if (!popover.contains(e.target) && (!btn || !btn.contains(e.target))) {
+                    popover.style.display = 'none';
+                    if (btn) btn.classList.remove('active');
+                }
+            }
+        });
+
         async function initDesktopWidgetMode() {
             try {
                 initWidgetResize();
                 if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
-                    const isWidget = await window.__TAURI_INTERNALS__.invoke('get_widget_mode');
-                    updateWidgetButtonUI(isWidget);
-                    console.log('🖥️ 初始桌面小组件模式:', isWidget);
+                    const cfg = await window.__TAURI_INTERNALS__.invoke('get_widget_config');
+                    if (cfg && typeof cfg.opacity === 'number') {
+                        setWidgetOpacity(cfg.opacity, false);
+                    }
+                    updateWidgetButtonUI(cfg.is_widget_mode);
+                    console.log('🖥️ 初始桌面小组件配置:', cfg);
                 }
             } catch (e) {
                 console.warn('⚠️ 获取初始桌面小组件模式失败:', e);
@@ -1703,9 +2044,14 @@
 
             if (typeof notifications === 'undefined' || !notifications || notifications.length === 0) {
                 listEl.innerHTML = `
-                    <div class="widget-empty">
-                        <div class="widget-empty-icon">🔔</div>
-                        <div class="widget-empty-text">桌面常驻中 · 暂无新消息</div>
+                    <div class="widget-empty" onmousedown="onWidgetMouseDown(event)">
+                        <div class="widget-empty-icon-wrap" onmousedown="onWidgetMouseDown(event)">
+                            <svg class="liquid-bell-icon" width="26" height="26" viewBox="0 0 24 24" fill="none">
+                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                        <div class="widget-empty-text">常驻桌面 · 暂无新通知</div>
                     </div>
                 `;
                 return;
