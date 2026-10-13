@@ -420,12 +420,23 @@ fn save_widget_config_to_file(config: &WidgetConfig) -> Result<(), String> {
 struct AppState {
     config: Arc<Mutex<Option<ConnectionConfig>>>,
     ws_running: Arc<Mutex<bool>>,
+    ws_status: Arc<Mutex<String>>,
     window_position: Arc<Mutex<Option<WindowPosition>>>,
     tray_icon: Arc<Mutex<Option<TrayIcon>>>,
     /// Windows 贴边防抖令牌：每次 Moved 事件自增，spawn 出去的 snap 任务
     /// 先等待后比对，令牌一致才执行，否则放弃（同一时刻只有最后一次生效）
     #[allow(dead_code)]
     snap_debounce_token: Arc<AtomicU64>,
+}
+
+fn emit_status(app: &tauri::AppHandle, ws_status: &Arc<Mutex<String>>, status: &str) {
+    if let Ok(mut lock) = ws_status.lock() {
+        *lock = status.to_string();
+    }
+    let _ = app.emit("websocket-status", status);
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.emit("websocket-status", status);
+    }
 }
 
 // 获取跨平台的配置目录
@@ -725,9 +736,10 @@ async fn start_websocket(
     drop(ws_running);
 
     let ws_running_clone = state.ws_running.clone();
+    let ws_status_clone = state.ws_status.clone();
     
     tokio::spawn(async move {
-        if let Err(e) = run_websocket(app, config, ws_running_clone).await {
+        if let Err(e) = run_websocket(app, config, ws_running_clone, ws_status_clone).await {
             eprintln!("WebSocket error: {}", e);
         }
     });
@@ -736,9 +748,10 @@ async fn start_websocket(
 }
 
 #[tauri::command]
-async fn stop_websocket(state: State<'_, AppState>) -> Result<String, String> {
+async fn stop_websocket(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<String, String> {
     let mut ws_running = state.ws_running.lock().unwrap();
     *ws_running = false;
+    emit_status(&app, &state.ws_status, "disconnected");
     Ok("WebSocket connection stopped".to_string())
 }
 
@@ -746,6 +759,12 @@ async fn stop_websocket(state: State<'_, AppState>) -> Result<String, String> {
 async fn is_websocket_running(state: State<'_, AppState>) -> Result<bool, String> {
     let ws_running = state.ws_running.lock().unwrap();
     Ok(*ws_running)
+}
+
+#[tauri::command]
+async fn get_connection_status(state: State<'_, AppState>) -> Result<String, String> {
+    let status = state.ws_status.lock().unwrap();
+    Ok(status.clone())
 }
 
 #[tauri::command]
@@ -945,6 +964,7 @@ async fn run_websocket(
     app: tauri::AppHandle,
     config: ConnectionConfig,
     ws_running: Arc<Mutex<bool>>,
+    ws_status: Arc<Mutex<String>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // 构建 WebSocket URL
     let ws_url = {
@@ -968,17 +988,17 @@ async fn run_websocket(
     while *ws_running.lock().unwrap() {
         if reconnect_attempt > 0 {
             println!("🔄 尝试重连中 (第 {} 次)...", reconnect_attempt);
-            let _ = app.emit("websocket-status", "reconnecting");
+            emit_status(&app, &ws_status, "reconnecting");
         } else {
             println!("🔌 正在建立 WebSocket 连接...");
-            let _ = app.emit("websocket-status", "connecting");
+            emit_status(&app, &ws_status, "connecting");
         }
 
         match connect_async(url.clone()).await {
             Ok((ws_stream, _)) => {
                 println!("✅ WebSocket 连接建立成功");
                 reconnect_attempt = 0;
-                let _ = app.emit("websocket-status", "connected");
+                emit_status(&app, &ws_status, "connected");
 
                 let (mut write, mut read) = ws_stream.split();
                 let mut ping_interval = tokio::time::interval(std::time::Duration::from_secs(15));
@@ -1096,12 +1116,12 @@ async fn run_websocket(
         reconnect_attempt += 1;
         // 指数退避重连等待时间：2s, 4s, 8s, 16s, 最大 30s
         let delay_secs = std::cmp::min(1u64 << reconnect_attempt.min(5), 30);
-        let _ = app.emit("websocket-status", "reconnecting");
+        emit_status(&app, &ws_status, "reconnecting");
         println!("⏳ {} 秒后尝试重新连接...", delay_secs);
         tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
     }
 
-    let _ = app.emit("websocket-status", "disconnected");
+    emit_status(&app, &ws_status, "disconnected");
     let mut running = ws_running.lock().unwrap();
     *running = false;
     println!("🛑 WebSocket 异步运行任务已终止");
@@ -1117,6 +1137,7 @@ pub fn run() {
         .manage(AppState {
             config: Arc::new(Mutex::new(load_config_from_file())),
             ws_running: Arc::new(Mutex::new(false)),
+            ws_status: Arc::new(Mutex::new("connecting".to_string())),
             window_position: Arc::new(Mutex::new(None)),
             tray_icon: Arc::new(Mutex::new(None)),
             snap_debounce_token: Arc::new(AtomicU64::new(0)),
@@ -1256,8 +1277,9 @@ pub fn run() {
                         drop(ws_running);
 
                         let ws_running_clone = state.ws_running.clone();
+                        let ws_status_clone = state.ws_status.clone();
                         tokio::spawn(async move {
-                            if let Err(e) = run_websocket(app_handle, config, ws_running_clone).await {
+                            if let Err(e) = run_websocket(app_handle, config, ws_running_clone, ws_status_clone).await {
                                 eprintln!("WebSocket error: {}", e);
                             }
                         });
@@ -1457,6 +1479,7 @@ pub fn run() {
             start_websocket,
             stop_websocket,
             is_websocket_running,
+            get_connection_status,
             save_window_position,
             save_window_position_auto,
             load_window_position,

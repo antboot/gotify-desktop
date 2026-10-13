@@ -63,10 +63,20 @@ else
     DMG_DIR="src-tauri/target/release/bundle/dmg"
 fi
 
-# 5. 核心：macOS 规范代码签名与资源密封（彻底根治 os error 65: No route to host）
+# 5. 核心：macOS 规范代码签名、Entitlements 与资源密封（彻底根治 os error 65: No route to host）
 if [ -d "$APP_PATH" ]; then
-    echo "🔏 正在对应用执行深度签名 (强制绑定 com.gotify.notifier 标识符与权限声明)..."
-    codesign --force --deep --sign - --identifier "com.gotify.notifier" "$APP_PATH"
+    echo "🔏 正在检查本地代码签名身份..."
+    SIGN_IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null | grep -E "Apple Development|Developer ID Application" | head -n 1 | awk -F'"' '{print $2}' || true)
+    ENTITLEMENTS="src-tauri/Entitlements.plist"
+
+    if [ -n "$SIGN_IDENTITY" ]; then
+        echo "🔑 找到有效开发者证书: $SIGN_IDENTITY"
+        echo "🔏 正在使用开发者证书执行深度签名 (包含网络 Entitlements)..."
+        codesign --force --deep --sign "$SIGN_IDENTITY" --entitlements "$ENTITLEMENTS" --identifier "com.gotify.notifier" "$APP_PATH"
+    else
+        echo "⚠️ 未找到开发者证书，使用 Ad-hoc 签名并固化指定需求 (Designated Requirement)..."
+        codesign --force --deep --sign - --entitlements "$ENTITLEMENTS" --identifier "com.gotify.notifier" -r='=designated => identifier "com.gotify.notifier"' "$APP_PATH"
+    fi
     
     # 验证签名绑定
     SIGN_ID=$(codesign -dvvv "$APP_PATH" 2>&1 | grep "Identifier=com.gotify.notifier" || true)
@@ -93,8 +103,15 @@ if [ -d "$APP_PATH" ]; then
     echo "📲 正在同步安装到 /Applications..."
     rm -rf "/Applications/Gotify Notifier.app"
     cp -R "$APP_PATH" "/Applications/"
-    codesign --force --deep --sign - --identifier "com.gotify.notifier" "/Applications/Gotify Notifier.app"
-    echo "✅ /Applications/Gotify Notifier.app 更新并签名成功"
+    if [ -n "$SIGN_IDENTITY" ]; then
+        codesign --force --deep --sign "$SIGN_IDENTITY" --entitlements "$ENTITLEMENTS" --identifier "com.gotify.notifier" "/Applications/Gotify Notifier.app"
+    else
+        codesign --force --deep --sign - --entitlements "$ENTITLEMENTS" --identifier "com.gotify.notifier" -r='=designated => identifier "com.gotify.notifier"' "/Applications/Gotify Notifier.app"
+    fi
+    # 清理 quarantine 隔离属性并刷新 LaunchServices 缓存
+    xattr -cr "/Applications/Gotify Notifier.app"
+    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "/Applications/Gotify Notifier.app" 2>/dev/null || true
+    echo "✅ /Applications/Gotify Notifier.app 更新、签名并注册完成"
 fi
 
 echo ""

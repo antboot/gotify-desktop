@@ -2340,15 +2340,24 @@
                     // 检查初始 WebSocket 状态
                     try {
                         const { invoke } = window.__TAURI_INTERNALS__;
-                        const isRunning = await invoke('is_websocket_running');
-                        if (isRunning) {
-                            updateConnectionBanner('connected');
-                        } else {
-                            updateConnectionBanner('disconnected');
-                        }
+                        const status = await invoke('get_connection_status').catch(() => 'connecting');
+                        updateConnectionBanner(status);
                     } catch (e) {
                         console.warn('⚠️ 检查初始 WebSocket 状态失败:', e);
                     }
+
+                    // 定期与窗口激活时同步连接状态，防止漏事件导致红灯不恢复
+                    const syncConnectionStatus = async () => {
+                        try {
+                            const { invoke } = window.__TAURI_INTERNALS__;
+                            if (invoke) {
+                                const currentStatus = await invoke('get_connection_status');
+                                updateConnectionBanner(currentStatus);
+                            }
+                        } catch (_) {}
+                    };
+                    setInterval(syncConnectionStatus, 3000);
+                    window.addEventListener('focus', syncConnectionStatus);
 
                     console.log('========================================');
                     console.log('🎊 所有监听器注册完成！等待接收消息...');
