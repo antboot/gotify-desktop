@@ -27,10 +27,23 @@ cargo tauri build
 
 if [ $? -eq 0 ]; then
     APP_PATH="src-tauri/target/release/bundle/macos/Gotify Notifier.app"
+    DMG_DIR="src-tauri/target/release/bundle/dmg"
     if [ -d "$APP_PATH" ]; then
-        echo "🔏 正在对应用进行签名 (绑定 identifier com.gotify.notifier)..."
+        echo "🔏 正在对应用进行规范签名 (绑定 identifier com.gotify.notifier 避免 macOS 27 本地网络拦截)..."
         codesign --force --deep --sign - --identifier "com.gotify.notifier" "$APP_PATH"
         echo "✅ 签名完成"
+
+        echo "📦 正在重新打包包含已签名 App 的 DMG 安装包..."
+        TMP_DMG_DIR=$(mktemp -d)
+        cp -R "$APP_PATH" "$TMP_DMG_DIR/"
+        ln -s /Applications "$TMP_DMG_DIR/Applications"
+        DMG_FILE=$(find "$DMG_DIR" -name "*.dmg" -maxdepth 1 | head -n 1)
+        if [ -n "$DMG_FILE" ]; then
+            rm -f "$DMG_FILE"
+            hdiutil create -volname "Gotify Notifier" -srcfolder "$TMP_DMG_DIR" -ov -format UDZO "$DMG_FILE" > /dev/null 2>&1
+            echo "✅ DMG 重新打包完成: $DMG_FILE"
+        fi
+        rm -rf "$TMP_DMG_DIR"
     fi
 
     echo ""
