@@ -80,7 +80,7 @@ WebKit automatically desaturates and dims `backdrop-filter` on inactive windows.
 Never use outer `box-shadow` (macOS clipping creates black fringes). Use **inset glows and micro borders**:
 ```css
 .desktop-widget-card {
-    border-radius: 26px !important;
+    border-radius: 16px !important;
     background: rgba(22, 28, 40, var(--widget-opacity, 0.75)) !important;
     backdrop-filter: blur(32px) !important;
     -webkit-backdrop-filter: blur(32px) !important;

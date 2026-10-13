@@ -149,12 +149,12 @@ html.widget-mode body {
     overflow: hidden !important;
 }
 
-/* 桌面小组件卡片：Squircle 连续大圆角 + 液态玻璃质感 */
+/* 桌面小组件卡片：与 macOS 系统原生窗口一致的标准圆角 (16px) + 液态玻璃质感 */
 .desktop-widget-card {
     position: relative;
     width: 100%;
     height: 100%;
-    border-radius: 26px !important;
+    border-radius: 16px !important;
     /* 恒定深色半透底色 */
     background: rgba(22, 28, 40, var(--widget-opacity, 0.75)) !important;
     backdrop-filter: blur(32px) !important;
