@@ -1305,6 +1305,19 @@ pub fn run() {
                     });
                 }
             }
+            tauri::WindowEvent::Resized(size) => {
+                if window.label() == "main" {
+                    let widget_cfg = load_widget_config_from_file();
+                    if widget_cfg.is_widget_mode {
+                        let mut cfg = widget_cfg;
+                        if size.width >= 200 && size.height >= 100 {
+                            cfg.widget_width = size.width;
+                            cfg.widget_height = size.height;
+                            let _ = save_widget_config_to_file(&cfg);
+                        }
+                    }
+                }
+            }
             tauri::WindowEvent::ThemeChanged(theme) => {
                 println!("🎨 系统主题已更改: {:?}", theme);
 
@@ -1349,6 +1362,7 @@ pub fn run() {
             get_widget_mode,
             get_widget_config,
             save_widget_position,
+            set_widget_size,
             set_widget_mode,
             toggle_widget_mode,
         ])
@@ -1728,5 +1742,26 @@ async fn set_widget_mode(app: tauri::AppHandle, enable: bool) -> Result<bool, St
 async fn toggle_widget_mode(app: tauri::AppHandle) -> Result<bool, String> {
     let current = get_widget_mode();
     set_widget_mode(app, !current).await
+}
+
+#[tauri::command]
+async fn set_widget_size(app: tauri::AppHandle, width: u32, height: u32) -> Result<WidgetConfig, String> {
+    let w = width.clamp(240, 900);
+    let h = height.clamp(140, 900);
+
+    let window = app.get_webview_window("main")
+        .ok_or_else(|| "找不到主窗口".to_string())?;
+
+    window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+        width: w as f64,
+        height: h as f64,
+    })).map_err(|e| format!("设置尺寸失败: {}", e))?;
+
+    let mut config = load_widget_config_from_file();
+    config.widget_width = w;
+    config.widget_height = h;
+    save_widget_config_to_file(&config)?;
+
+    Ok(config)
 }
 

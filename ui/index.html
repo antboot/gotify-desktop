@@ -930,81 +930,93 @@
             background: rgba(0, 0, 0, 0.15);
         }
 
-        /* 桌面小组件模式 (Desktop Widget Mode) */
-        body.widget-mode {
+        /* 桌面小组件模式 (Desktop Widget Mode) - 彻底透明，消灭外圈黑边 */
+        html.widget-mode,
+        html.widget-mode body {
             background: transparent !important;
+            background-color: transparent !important;
+            margin: 0 !important;
+            padding: 0 !important;
             overflow: hidden !important;
-            user-select: none;
-            -webkit-user-select: none;
+            border: none !important;
+            box-shadow: none !important;
         }
 
-        body.widget-mode .container {
+        html.widget-mode .container {
             background: transparent !important;
-            min-height: 100vh;
-            height: 100vh;
-            padding: 8px;
+            background-color: transparent !important;
+            min-height: 100vh !important;
+            height: 100vh !important;
+            width: 100vw !important;
+            padding: 0 !important;
+            margin: 0 !important;
             box-sizing: border-box;
             display: flex;
             align-items: stretch;
             justify-content: stretch;
+            border: none !important;
+            box-shadow: none !important;
         }
 
-        body.widget-mode #appTitlebar,
-        body.widget-mode #connectionBanner,
-        body.widget-mode #notifications,
-        body.widget-mode .theme-toggle,
-        body.widget-mode #clearAllBtn {
+        html.widget-mode #appTitlebar,
+        html.widget-mode #connectionBanner,
+        html.widget-mode #notifications,
+        html.widget-mode .theme-toggle,
+        html.widget-mode #clearAllBtn {
             display: none !important;
         }
 
         .desktop-widget-card {
+            position: relative;
             width: 100%;
             height: 100%;
-            background: rgba(255, 255, 255, 0.78);
-            backdrop-filter: blur(28px) saturate(180%);
-            -webkit-backdrop-filter: blur(28px) saturate(180%);
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(40px) saturate(190%);
+            -webkit-backdrop-filter: blur(40px) saturate(190%);
             border: 1px solid rgba(255, 255, 255, 0.65);
             border-radius: 18px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.05);
+            box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.8), 0 12px 32px rgba(0, 0, 0, 0.12);
             display: flex;
             flex-direction: column;
             overflow: hidden;
-            transition: all 0.3s ease;
             box-sizing: border-box;
             color: #1a1a2e;
+            user-select: none;
+            -webkit-user-select: none;
         }
 
         [data-theme="dark"] .desktop-widget-card {
-            background: rgba(22, 26, 35, 0.82);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.25);
-            color: #e5e7eb;
+            background: rgba(24, 28, 38, 0.78);
+            backdrop-filter: blur(45px) saturate(200%) contrast(105%);
+            -webkit-backdrop-filter: blur(45px) saturate(200%) contrast(105%);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.16), 0 16px 40px rgba(0, 0, 0, 0.45);
+            color: #f3f4f6;
         }
 
         .widget-header {
-            height: 34px;
-            padding: 0 12px;
+            height: 38px;
+            padding: 0 12px 0 14px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
             -webkit-app-region: drag;
             cursor: grab;
-            user-select: none;
             flex-shrink: 0;
         }
 
         [data-theme="dark"] .widget-header {
-            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.07);
         }
 
         .widget-status {
             display: flex;
             align-items: center;
-            gap: 7px;
-            font-size: 12px;
+            gap: 8px;
+            font-size: 13px;
             font-weight: 600;
-            letter-spacing: 0.3px;
+            letter-spacing: -0.2px;
             -webkit-app-region: drag;
         }
 
@@ -1013,23 +1025,31 @@
             height: 7px;
             border-radius: 50%;
             background: #10b981;
-            box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+            box-shadow: 0 0 8px rgba(16, 185, 129, 0.7);
             display: inline-block;
+            transition: all 0.3s ease;
         }
 
         .widget-indicator.offline {
             background: #ef4444;
-            box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+            box-shadow: 0 0 8px rgba(239, 68, 68, 0.7);
         }
 
         .widget-badge {
-            background: var(--accent);
-            color: #ffffff;
-            font-size: 10px;
-            font-weight: bold;
-            padding: 1px 6px;
-            border-radius: 10px;
-            line-height: 1.3;
+            background: rgba(99, 102, 241, 0.15);
+            color: #6366f1;
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            font-size: 10.5px;
+            font-weight: 600;
+            padding: 1px 7px;
+            border-radius: 12px;
+            line-height: 1.25;
+        }
+
+        [data-theme="dark"] .widget-badge {
+            background: rgba(129, 140, 248, 0.2);
+            color: #a5b4fc;
+            border: 1px solid rgba(129, 140, 248, 0.35);
         }
 
         .widget-badge.hidden {
@@ -1039,34 +1059,76 @@
         .widget-actions {
             display: flex;
             align-items: center;
-            gap: 5px;
+            gap: 4px;
             -webkit-app-region: no-drag;
+        }
+
+        .widget-size-toggles {
+            display: flex;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.05);
+            padding: 2px;
+            border-radius: 6px;
+            margin-right: 4px;
+            gap: 2px;
+        }
+
+        [data-theme="dark"] .widget-size-toggles {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .size-pill {
+            background: transparent;
+            border: none;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: inherit;
+            opacity: 0.55;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .size-pill:hover {
+            opacity: 0.9;
+        }
+
+        .size-pill.active {
+            opacity: 1;
+            background: rgba(255, 255, 255, 0.85);
+            color: #111827;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        [data-theme="dark"] .size-pill.active {
+            background: rgba(255, 255, 255, 0.2);
+            color: #ffffff;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
         }
 
         .widget-btn {
             background: transparent;
             border: none;
-            width: 22px;
-            height: 22px;
+            width: 24px;
+            height: 24px;
             border-radius: 6px;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            font-size: 11px;
             color: inherit;
             opacity: 0.6;
-            transition: all 0.2s ease;
+            transition: all 0.15s ease;
         }
 
         .widget-btn:hover {
             opacity: 1;
-            background: rgba(0, 0, 0, 0.08);
-            transform: scale(1.05);
+            background: rgba(0, 0, 0, 0.07);
         }
 
         [data-theme="dark"] .widget-btn:hover {
-            background: rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.1);
         }
 
         .widget-body {
@@ -1076,7 +1138,7 @@
             overflow-x: hidden;
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 7px;
         }
 
         .widget-body::-webkit-scrollbar {
@@ -1098,76 +1160,129 @@
             align-items: center;
             justify-content: center;
             height: 100%;
-            opacity: 0.5;
-            font-size: 11px;
-            gap: 4px;
-            padding: 20px 0;
+            opacity: 0.45;
+            font-size: 11.5px;
+            gap: 6px;
+            padding: 24px 0;
             text-align: center;
         }
 
         .widget-empty-icon {
-            font-size: 20px;
+            font-size: 22px;
         }
 
         .widget-item {
-            background: rgba(255, 255, 255, 0.6);
+            background: rgba(255, 255, 255, 0.55);
             border: 1px solid rgba(0, 0, 0, 0.05);
-            border-radius: 10px;
-            padding: 7px 9px;
-            font-size: 11px;
+            border-radius: 12px;
+            padding: 8px 10px 8px 12px;
+            font-size: 11.5px;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             display: flex;
             flex-direction: column;
-            gap: 2px;
+            gap: 3px;
+            position: relative;
+            overflow: hidden;
         }
 
         [data-theme="dark"] .widget-item {
             background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.08);
         }
 
         .widget-item:hover {
-            background: rgba(255, 255, 255, 0.88);
+            background: rgba(255, 255, 255, 0.85);
             transform: translateY(-1px);
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+            border-color: rgba(0, 0, 0, 0.1);
         }
 
         [data-theme="dark"] .widget-item:hover {
             background: rgba(255, 255, 255, 0.09);
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+            border-color: rgba(255, 255, 255, 0.16);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+        }
+
+        /* 优先级状态指示竖条 */
+        .widget-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 7px;
+            bottom: 7px;
+            width: 3px;
+            border-radius: 0 2px 2px 0;
+            background: #9ca3af;
+        }
+
+        .widget-item.priority-high::before {
+            background: #ef4444;
+            box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+        }
+
+        .widget-item.priority-medium::before {
+            background: #f59e0b;
+        }
+
+        .widget-item.priority-low::before {
+            background: #10b981;
         }
 
         .widget-item-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
+            padding-left: 2px;
         }
 
         .widget-item-title {
             font-weight: 600;
+            font-size: 12px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-            max-width: 190px;
+            max-width: 75%;
         }
 
         .widget-item-time {
-            font-size: 9px;
+            font-size: 10px;
             opacity: 0.55;
             flex-shrink: 0;
         }
 
         .widget-item-desc {
-            opacity: 0.8;
-            font-size: 10.5px;
-            line-height: 1.35;
+            padding-left: 2px;
+            opacity: 0.78;
+            font-size: 11px;
+            line-height: 1.4;
             overflow: hidden;
             text-overflow: ellipsis;
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
             word-break: break-word;
+        }
+
+        /* 右下角自由缩放手柄 */
+        .widget-resize-handle {
+            position: absolute;
+            bottom: 3px;
+            right: 3px;
+            width: 14px;
+            height: 14px;
+            cursor: se-resize;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0.35;
+            transition: opacity 0.2s ease;
+            z-index: 100;
+            -webkit-app-region: no-drag;
+        }
+
+        .widget-resize-handle:hover {
+            opacity: 0.85;
         }
     </style>
 </head>
@@ -1237,7 +1352,7 @@
         </div>
 
         <!-- 桌面小组件模式视图 (Desktop Widget View) -->
-        <div id="desktopWidgetView" class="desktop-widget-card" style="display: none;" ondblclick="toggleDesktopWidgetMode(event)">
+        <div id="desktopWidgetView" class="desktop-widget-card" style="display: none;">
             <div class="widget-header" data-tauri-drag-region>
                 <div class="widget-status" data-tauri-drag-region>
                     <span id="widgetStatusDot" class="widget-indicator"></span>
@@ -1245,8 +1360,25 @@
                     <span id="widgetBadge" class="widget-badge hidden">0</span>
                 </div>
                 <div class="widget-actions">
-                    <button class="widget-btn" onclick="clearAllNotifications()" title="清除通知">🗑️</button>
-                    <button class="widget-btn" onclick="toggleDesktopWidgetMode(event)" title="展开完整窗口">⤢</button>
+                    <div class="widget-size-toggles" title="切换组件尺寸">
+                        <button id="pillSizeS" class="size-pill" onclick="changeWidgetPresetSize('s')" title="小尺寸 (280x160)">S</button>
+                        <button id="pillSizeM" class="size-pill active" onclick="changeWidgetPresetSize('m')" title="中尺寸 (340x240)">M</button>
+                        <button id="pillSizeL" class="size-pill" onclick="changeWidgetPresetSize('l')" title="大尺寸 (420x360)">L</button>
+                    </div>
+                    <button class="widget-btn" onclick="clearAllNotifications()" title="清除通知">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                    </button>
+                    <button class="widget-btn" onclick="toggleDesktopWidgetMode(event)" title="还原完整窗口">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="15 3 21 3 21 9"></polyline>
+                            <polyline points="9 21 3 21 3 15"></polyline>
+                            <line x1="21" y1="3" x2="14" y2="10"></line>
+                            <line x1="3" y1="21" x2="10" y2="14"></line>
+                        </svg>
+                    </button>
                 </div>
             </div>
             <div id="widgetMessageList" class="widget-body">
@@ -1254,6 +1386,13 @@
                     <div class="widget-empty-icon">🔔</div>
                     <div class="widget-empty-text">桌面常驻中 · 暂无新消息</div>
                 </div>
+            </div>
+            <!-- 右下角自由缩放拖动手柄 -->
+            <div id="widgetResizeHandle" class="widget-resize-handle" title="按住拖拽调整小组件大小">
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                    <line x1="8.5" y1="2.5" x2="2.5" y2="8.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+                    <line x1="8.5" y1="5.5" x2="5.5" y2="8.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+                </svg>
             </div>
         </div>
 
@@ -1353,6 +1492,44 @@
         // 桌面小组件模式 (Desktop Widget Mode)
         let isDesktopWidgetMode = false;
 
+        async function updateActivePresetPill() {
+            try {
+                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                    const cfg = await window.__TAURI_INTERNALS__.invoke('get_widget_config');
+                    const w = cfg.widget_width || window.innerWidth;
+                    document.querySelectorAll('.size-pill').forEach(el => el.classList.remove('active'));
+                    if (w <= 300) {
+                        document.getElementById('pillSizeS')?.classList.add('active');
+                    } else if (w <= 380) {
+                        document.getElementById('pillSizeM')?.classList.add('active');
+                    } else {
+                        document.getElementById('pillSizeL')?.classList.add('active');
+                    }
+                }
+            } catch (e) {
+                console.warn(e);
+            }
+        }
+
+        async function changeWidgetPresetSize(preset) {
+            let w = 340, h = 240;
+            if (preset === 's') { w = 280; h = 160; }
+            else if (preset === 'm') { w = 340; h = 240; }
+            else if (preset === 'l') { w = 420; h = 360; }
+
+            document.querySelectorAll('.size-pill').forEach(el => el.classList.remove('active'));
+            const pill = document.getElementById(`pillSize${preset.toUpperCase()}`);
+            if (pill) pill.classList.add('active');
+
+            try {
+                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                    await window.__TAURI_INTERNALS__.invoke('set_widget_size', { width: w, height: h });
+                }
+            } catch (e) {
+                console.error('设置小组件预设尺寸失败:', e);
+            }
+        }
+
         function updateWidgetButtonUI(isWidget) {
             isDesktopWidgetMode = isWidget;
             const btn = document.getElementById('widgetModeBtn');
@@ -1374,13 +1551,16 @@
                     ((typeof t === 'function' ? t('enterDesktopWidget') : null) || '钉在桌面小组件');
             }
 
-            // 更新容器样式
+            // 更新容器样式 - 同时在 html 和 body 上切换，消除外层暗色底色
             if (isWidget) {
+                document.documentElement.classList.add('widget-mode');
                 document.body.classList.add('widget-mode');
                 const widgetView = document.getElementById('desktopWidgetView');
                 if (widgetView) widgetView.style.display = 'flex';
                 renderWidgetNotifications();
+                updateActivePresetPill();
             } else {
+                document.documentElement.classList.remove('widget-mode');
                 document.body.classList.remove('widget-mode');
                 const widgetView = document.getElementById('desktopWidgetView');
                 if (widgetView) widgetView.style.display = 'none';
@@ -1389,6 +1569,7 @@
 
         async function initDesktopWidgetMode() {
             try {
+                initWidgetResize();
                 if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
                     const isWidget = await window.__TAURI_INTERNALS__.invoke('get_widget_mode');
                     updateWidgetButtonUI(isWidget);
@@ -1422,6 +1603,76 @@
             }
         }
 
+        // 右下角自由缩放逻辑
+        let isResizingWidget = false;
+        let resizeStartX = 0;
+        let resizeStartY = 0;
+        let resizeStartWidth = 0;
+        let resizeStartHeight = 0;
+        let resizeRafId = null;
+
+        function initWidgetResize() {
+            const handle = document.getElementById('widgetResizeHandle');
+            if (!handle) return;
+
+            handle.addEventListener('mousedown', async (e) => {
+                if (e.button !== 0) return;
+                e.preventDefault();
+                e.stopPropagation();
+
+                isResizingWidget = true;
+                resizeStartX = e.screenX;
+                resizeStartY = e.screenY;
+
+                try {
+                    if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                        const cfg = await window.__TAURI_INTERNALS__.invoke('get_widget_config');
+                        resizeStartWidth = cfg.widget_width || window.innerWidth;
+                        resizeStartHeight = cfg.widget_height || window.innerHeight;
+                    } else {
+                        resizeStartWidth = window.innerWidth;
+                        resizeStartHeight = window.innerHeight;
+                    }
+                } catch {
+                    resizeStartWidth = window.innerWidth;
+                    resizeStartHeight = window.innerHeight;
+                }
+
+                document.addEventListener('mousemove', onWidgetResizeMouseMove);
+                document.addEventListener('mouseup', onWidgetResizeMouseUp);
+            });
+        }
+
+        function onWidgetResizeMouseMove(e) {
+            if (!isResizingWidget) return;
+            const deltaX = e.screenX - resizeStartX;
+            const deltaY = e.screenY - resizeStartY;
+
+            const newW = Math.max(240, Math.min(900, Math.round(resizeStartWidth + deltaX)));
+            const newH = Math.max(140, Math.min(900, Math.round(resizeStartHeight + deltaY)));
+
+            // 自由调节时清除预设尺寸的活跃标记
+            document.querySelectorAll('.size-pill').forEach(el => el.classList.remove('active'));
+
+            if (resizeRafId) cancelAnimationFrame(resizeRafId);
+            resizeRafId = requestAnimationFrame(async () => {
+                try {
+                    if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                        await window.__TAURI_INTERNALS__.invoke('set_widget_size', { width: newW, height: newH });
+                    }
+                } catch (err) {
+                    console.warn('调整尺寸失败:', err);
+                }
+            });
+        }
+
+        function onWidgetResizeMouseUp() {
+            if (!isResizingWidget) return;
+            isResizingWidget = false;
+            document.removeEventListener('mousemove', onWidgetResizeMouseMove);
+            document.removeEventListener('mouseup', onWidgetResizeMouseUp);
+        }
+
         function renderWidgetNotifications() {
             const listEl = document.getElementById('widgetMessageList');
             const badgeEl = document.getElementById('widgetBadge');
@@ -1446,9 +1697,8 @@
                 return;
             }
 
-            // 展示最新的 3 条消息
-            const topList = notifications.slice(0, 3);
-            listEl.innerHTML = topList.map(notif => {
+            // 展示所有消息（容器自带弹性滚动条，支持自适应尺寸高度）
+            listEl.innerHTML = notifications.map(notif => {
                 const timeAgo = formatTime(notif.date);
                 const priorityClass = getPriorityClass(notif.priority);
                 const cleanMsg = (notif.message || '').replace(/<[^>]*>?/gm, '');
