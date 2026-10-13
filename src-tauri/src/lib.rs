@@ -199,17 +199,21 @@ mod macos_window {
                 }
             }
 
-            // 桌面小组件需要支持点击交互（按钮、卡片、切换尺寸、缩放手柄）。
-            // 在 macOS 中，负数 Level（如 kCGDesktopWindowLevel = -2147483623）属于壁纸层，
-            // 访达（Finder）的桌面全屏视图会截获所有鼠标事件，导致 Webview 完全无法接收点击。
-            // 因此必须使用 Normal Level (0)，配合 orderBack: 将其置于普通应用窗口底层。
-            msg_isize(win, level_sel, 0);
+            // 桌面小组件窗口层级设置为 -1 (即 kCGNormalWindowLevel - 1)：
+            // 1. 普通应用窗口和 macOS 台前调度 (Stage Manager) 的缩略图堆叠卡片都在 Level 0 或更高。
+            //    小组件处于 Level -1，意味着台前调度的卡片和所有普通窗口永远天然位于小组件上方，
+            //    绝不会被小组件遮挡！
+            // 2. Finder (访达) 的桌面全屏壁纸处于 kCGDesktopWindowLevel (-2147483623)，
+            //    Level -1 远高于壁纸层，因此鼠标点击、拖拽操作绝不会被桌面背景拦截，
+            //    小组件内的所有按钮和卡片均能流畅点击交互！
+            msg_isize(win, level_sel, -1);
 
             // 1: canJoinAllSpaces (所有桌面空间可见)
-            // 16: stationary (切换桌面时不移动)
+            // 16: stationary (切换桌面空间时不移动)
             // 64: ignoresCycle (Cmd+Tab 轮巡不选中)
             // 256: fullScreenAuxiliary (全屏时作为辅助窗口)
-            msg_usize(win, behavior_sel, 1 | 16 | 64 | 256);
+            // 262144: canJoinAllApplications (Stage Manager 识别为桌面组件，不作为独立舞台应用管理或遮挡卡片)
+            msg_usize(win, behavior_sel, 1 | 16 | 64 | 256 | 262144);
 
             let inval_sel = sel_registerName(b"invalidateShadow\0".as_ptr() as _);
             let f_inval: unsafe extern "C" fn(*mut c_void, *mut c_void) =

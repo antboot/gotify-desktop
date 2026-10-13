@@ -973,14 +973,14 @@
             width: 100%;
             height: 100%;
             border-radius: 26px !important;
-            /* 默认苹果深色半透液态玻璃质感（参见原生挂件） */
-            background: rgba(22, 28, 42, var(--widget-opacity, 0.70)) !important;
-            backdrop-filter: blur(48px) saturate(210%) brightness(102%) !important;
-            -webkit-backdrop-filter: blur(48px) saturate(210%) brightness(102%) !important;
-            border: 1px solid rgba(255, 255, 255, 0.18) !important;
+            /* 默认苹果深色半透液态玻璃质感（恒定稳态底色，聚焦/失焦绝不产生跳变） */
+            background: rgba(22, 28, 40, var(--widget-opacity, 0.75)) !important;
+            backdrop-filter: blur(32px) !important;
+            -webkit-backdrop-filter: blur(32px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.16) !important;
             /* 严禁向外投影（外部阴影会在窗口四角被裁剪成直角黑色毛刺），纯靠精雕细琢的内发光与微边框呈现浮雕玻璃质感 */
             box-shadow:
-                inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.32),
+                inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.28),
                 inset 0 -1px 1px 0 rgba(0, 0, 0, 0.25),
                 inset 0 0 0 0.5px rgba(255, 255, 255, 0.08) !important;
             display: flex !important;
@@ -991,13 +991,14 @@
             user-select: none;
             -webkit-user-select: none;
             pointer-events: auto !important;
-            transition: background 0.25s ease, border-color 0.25s ease;
             cursor: grab;
         }
 
         /* 浅色主题模式适配（晶莹水晶白） */
         [data-theme="light"] .desktop-widget-card {
-            background: rgba(245, 247, 252, var(--widget-opacity, 0.70)) !important;
+            background: rgba(245, 247, 252, var(--widget-opacity, 0.75)) !important;
+            backdrop-filter: blur(32px) !important;
+            -webkit-backdrop-filter: blur(32px) !important;
             border: 1px solid rgba(255, 255, 255, 0.65) !important;
             box-shadow:
                 inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.85),
@@ -1074,57 +1075,6 @@
             -webkit-app-region: no-drag !important;
             pointer-events: auto !important;
             z-index: 10;
-        }
-
-        .widget-size-toggles {
-            display: flex;
-            align-items: center;
-            background: rgba(0, 0, 0, 0.05);
-            padding: 2.5px;
-            border-radius: 7px;
-            margin-right: 3px;
-            gap: 2px;
-            border: 0.5px solid rgba(0, 0, 0, 0.04);
-            -webkit-app-region: no-drag !important;
-            pointer-events: auto !important;
-        }
-
-        [data-theme="dark"] .widget-size-toggles {
-            background: rgba(255, 255, 255, 0.07);
-            border: 0.5px solid rgba(255, 255, 255, 0.08);
-        }
-
-        .size-pill {
-            background: transparent;
-            border: none;
-            font-size: 10px;
-            font-weight: 600;
-            padding: 2px 6.5px;
-            border-radius: 5px;
-            color: inherit;
-            opacity: 0.55;
-            cursor: pointer;
-            transition: all 0.16s cubic-bezier(0.4, 0, 0.2, 1);
-            -webkit-app-region: no-drag !important;
-            pointer-events: auto !important;
-        }
-
-        .size-pill:hover {
-            opacity: 0.9;
-            background: rgba(255, 255, 255, 0.12);
-        }
-
-        .size-pill.active {
-            opacity: 1;
-            background: rgba(255, 255, 255, 0.85);
-            color: #111827;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-        }
-
-        [data-theme="dark"] .size-pill.active {
-            background: rgba(255, 255, 255, 0.22);
-            color: #ffffff;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
         }
 
         .widget-btn {
@@ -1620,11 +1570,6 @@
                     <span id="widgetBadge" class="widget-badge hidden">0</span>
                 </div>
                 <div class="widget-actions" onmousedown="event.stopPropagation()" onpointerdown="event.stopPropagation()">
-                    <div class="widget-size-toggles" title="切换组件尺寸" onmousedown="event.stopPropagation()">
-                        <button id="pillSizeS" class="size-pill" onclick="changeWidgetPresetSize('s')" title="小尺寸 (280x160)">S</button>
-                        <button id="pillSizeM" class="size-pill active" onclick="changeWidgetPresetSize('m')" title="中尺寸 (340x240)">M</button>
-                        <button id="pillSizeL" class="size-pill" onclick="changeWidgetPresetSize('l')" title="大尺寸 (420x360)">L</button>
-                    </div>
                     <!-- 玻璃透明度调节按钮 -->
                     <button id="widgetOpacityBtn" class="widget-btn" onclick="toggleOpacityPopover(event)" title="调整玻璃透明度" onmousedown="event.stopPropagation()">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1777,44 +1722,6 @@
         // 桌面小组件模式 (Desktop Widget Mode)
         let isDesktopWidgetMode = false;
 
-        async function updateActivePresetPill() {
-            try {
-                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
-                    const cfg = await window.__TAURI_INTERNALS__.invoke('get_widget_config');
-                    const w = cfg.widget_width || window.innerWidth;
-                    document.querySelectorAll('.size-pill').forEach(el => el.classList.remove('active'));
-                    if (w <= 300) {
-                        document.getElementById('pillSizeS')?.classList.add('active');
-                    } else if (w <= 380) {
-                        document.getElementById('pillSizeM')?.classList.add('active');
-                    } else {
-                        document.getElementById('pillSizeL')?.classList.add('active');
-                    }
-                }
-            } catch (e) {
-                console.warn(e);
-            }
-        }
-
-        async function changeWidgetPresetSize(preset) {
-            let w = 340, h = 240;
-            if (preset === 's') { w = 280; h = 160; }
-            else if (preset === 'm') { w = 340; h = 240; }
-            else if (preset === 'l') { w = 420; h = 360; }
-
-            document.querySelectorAll('.size-pill').forEach(el => el.classList.remove('active'));
-            const pill = document.getElementById(`pillSize${preset.toUpperCase()}`);
-            if (pill) pill.classList.add('active');
-
-            try {
-                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
-                    await window.__TAURI_INTERNALS__.invoke('set_widget_size', { width: w, height: h });
-                }
-            } catch (e) {
-                console.error('设置小组件预设尺寸失败:', e);
-            }
-        }
-
         function updateWidgetButtonUI(isWidget) {
             isDesktopWidgetMode = isWidget;
             const btn = document.getElementById('widgetModeBtn');
@@ -1843,7 +1750,6 @@
                 const widgetView = document.getElementById('desktopWidgetView');
                 if (widgetView) widgetView.style.display = 'flex';
                 renderWidgetNotifications();
-                updateActivePresetPill();
             } else {
                 document.documentElement.classList.remove('widget-mode');
                 document.body.classList.remove('widget-mode');
@@ -1856,8 +1762,7 @@
         function onWidgetMouseDown(event) {
             if (!event || event.button !== 0) return;
             // 排除按钮、输入滑块、透明度弹窗以及点击卡片
-            if (event.target.closest('.size-pill') ||
-                event.target.closest('.widget-btn') ||
+            if (event.target.closest('.widget-btn') ||
                 event.target.closest('.widget-mini-btn') ||
                 event.target.closest('.widget-actions') ||
                 event.target.closest('#widgetOpacityPopover') ||
