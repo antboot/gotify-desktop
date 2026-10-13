@@ -36,11 +36,6 @@ mod macos_window {
         fn objc_msgSend();
     }
 
-    #[link(name = "CoreGraphics", kind = "framework")]
-    extern "C" {
-        fn CGWindowLevelForKey(key: i32) -> i32;
-    }
-
     extern "C" {
         static _dispatch_main_q: c_void;
         fn dispatch_async_f(
@@ -182,15 +177,16 @@ mod macos_window {
                 }
             }
 
-            // kCGDesktopWindowLevelKey = 2. Desktop Icon Level is CGWindowLevelForKey(2) + 1
-            let raw_level = CGWindowLevelForKey(2) as isize;
-            let desktop_level = if raw_level == 0 { -2147483602 } else { raw_level + 1 };
-            msg_isize(win, level_sel, desktop_level);
+            // 桌面小组件需要支持点击交互（按钮、卡片、切换尺寸、缩放手柄）。
+            // 在 macOS 中，负数 Level（如 kCGDesktopWindowLevel = -2147483623）属于壁纸层，
+            // 访达（Finder）的桌面全屏视图会截获所有鼠标事件，导致 Webview 完全无法接收点击。
+            // 因此必须使用 Normal Level (0)，配合 orderBack: 将其置于普通应用窗口底层。
+            msg_isize(win, level_sel, 0);
 
-            // 1: canJoinAllSpaces
-            // 16: stationary (切换 Space 不动)
-            // 64: ignoresCycle (Cmd+Tab 不循环选中)
-            // 256: fullScreenAuxiliary
+            // 1: canJoinAllSpaces (所有桌面空间可见)
+            // 16: stationary (切换桌面时不移动)
+            // 64: ignoresCycle (Cmd+Tab 轮巡不选中)
+            // 256: fullScreenAuxiliary (全屏时作为辅助窗口)
             msg_usize(win, behavior_sel, 1 | 16 | 64 | 256);
 
             // orderBack: 沉在底层壁纸上
@@ -209,6 +205,22 @@ mod macos_window {
             let f_order: unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) =
                 std::mem::transmute(objc_msgSend as *const ());
             f_order(win, order_front_sel, std::ptr::null_mut());
+        }
+    }
+
+    unsafe extern "C" fn do_order_back(ctx: *mut c_void) {
+        let win = ctx;
+        if win.is_null() { return; }
+        let order_back_sel = sel_registerName(b"orderBack:\0".as_ptr() as _);
+        let f_order: unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) =
+            std::mem::transmute(objc_msgSend as *const ());
+        f_order(win, order_back_sel, std::ptr::null_mut());
+    }
+
+    pub fn schedule_order_back(ns_window: *mut c_void) {
+        if ns_window.is_null() { return; }
+        unsafe {
+            dispatch_async_f(&_dispatch_main_q, ns_window, do_order_back);
         }
     }
 
@@ -1274,6 +1286,20 @@ pub fn run() {
                 if window.label() == "main" {
                     let _ = window.hide();
                     api.prevent_close();
+                }
+            }
+            tauri::WindowEvent::Focused(focused) => {
+                // macOS: 小组件失去焦点时，自动沉到所有普通窗口下方，不遮挡正在操作的应用程序
+                if window.label() == "main" && !focused {
+                    let widget_cfg = load_widget_config_from_file();
+                    if widget_cfg.is_widget_mode {
+                        #[cfg(target_os = "macos")]
+                        {
+                            if let Ok(ns_win) = window.ns_window() {
+                                macos_window::schedule_order_back(ns_win as *mut std::ffi::c_void);
+                            }
+                        }
+                    }
                 }
             }
             tauri::WindowEvent::Moved(pos) => {

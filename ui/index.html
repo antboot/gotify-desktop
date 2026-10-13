@@ -983,6 +983,7 @@
             color: #1a1a2e;
             user-select: none;
             -webkit-user-select: none;
+            pointer-events: auto !important;
         }
 
         [data-theme="dark"] .desktop-widget-card {
@@ -1001,9 +1002,8 @@
             align-items: center;
             justify-content: space-between;
             border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-            -webkit-app-region: drag;
-            cursor: grab;
             flex-shrink: 0;
+            pointer-events: auto !important;
         }
 
         [data-theme="dark"] .widget-header {
@@ -1018,6 +1018,7 @@
             font-weight: 600;
             letter-spacing: -0.2px;
             -webkit-app-region: drag;
+            cursor: grab;
         }
 
         .widget-indicator {
@@ -1060,7 +1061,9 @@
             display: flex;
             align-items: center;
             gap: 4px;
-            -webkit-app-region: no-drag;
+            -webkit-app-region: no-drag !important;
+            pointer-events: auto !important;
+            z-index: 10;
         }
 
         .widget-size-toggles {
@@ -1071,6 +1074,8 @@
             border-radius: 6px;
             margin-right: 4px;
             gap: 2px;
+            -webkit-app-region: no-drag !important;
+            pointer-events: auto !important;
         }
 
         [data-theme="dark"] .widget-size-toggles {
@@ -1088,6 +1093,8 @@
             opacity: 0.55;
             cursor: pointer;
             transition: all 0.15s ease;
+            -webkit-app-region: no-drag !important;
+            pointer-events: auto !important;
         }
 
         .size-pill:hover {
@@ -1120,6 +1127,8 @@
             color: inherit;
             opacity: 0.6;
             transition: all 0.15s ease;
+            -webkit-app-region: no-drag !important;
+            pointer-events: auto !important;
         }
 
         .widget-btn:hover {
@@ -1139,6 +1148,8 @@
             display: flex;
             flex-direction: column;
             gap: 7px;
+            -webkit-app-region: no-drag !important;
+            pointer-events: auto !important;
         }
 
         .widget-body::-webkit-scrollbar {
@@ -1184,6 +1195,8 @@
             gap: 3px;
             position: relative;
             overflow: hidden;
+            -webkit-app-region: no-drag !important;
+            pointer-events: auto !important;
         }
 
         [data-theme="dark"] .widget-item {
@@ -1278,7 +1291,8 @@
             opacity: 0.35;
             transition: opacity 0.2s ease;
             z-index: 100;
-            -webkit-app-region: no-drag;
+            -webkit-app-region: no-drag !important;
+            pointer-events: auto !important;
         }
 
         .widget-resize-handle:hover {
@@ -1353,25 +1367,25 @@
 
         <!-- 桌面小组件模式视图 (Desktop Widget View) -->
         <div id="desktopWidgetView" class="desktop-widget-card" style="display: none;">
-            <div class="widget-header" data-tauri-drag-region>
+            <div class="widget-header">
                 <div class="widget-status" data-tauri-drag-region>
                     <span id="widgetStatusDot" class="widget-indicator"></span>
                     <span class="widget-title">Gotify</span>
                     <span id="widgetBadge" class="widget-badge hidden">0</span>
                 </div>
-                <div class="widget-actions">
-                    <div class="widget-size-toggles" title="切换组件尺寸">
+                <div class="widget-actions" onmousedown="event.stopPropagation()" onpointerdown="event.stopPropagation()">
+                    <div class="widget-size-toggles" title="切换组件尺寸" onmousedown="event.stopPropagation()">
                         <button id="pillSizeS" class="size-pill" onclick="changeWidgetPresetSize('s')" title="小尺寸 (280x160)">S</button>
                         <button id="pillSizeM" class="size-pill active" onclick="changeWidgetPresetSize('m')" title="中尺寸 (340x240)">M</button>
                         <button id="pillSizeL" class="size-pill" onclick="changeWidgetPresetSize('l')" title="大尺寸 (420x360)">L</button>
                     </div>
-                    <button class="widget-btn" onclick="clearAllNotifications()" title="清除通知">
+                    <button class="widget-btn" onclick="clearAllNotifications()" title="清除通知" onmousedown="event.stopPropagation()">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="3 6 5 6 21 6"></polyline>
                             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                         </svg>
                     </button>
-                    <button class="widget-btn" onclick="toggleDesktopWidgetMode(event)" title="还原完整窗口">
+                    <button class="widget-btn" onclick="toggleDesktopWidgetMode(event)" title="还原完整窗口" onmousedown="event.stopPropagation()">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="15 3 21 3 21 9"></polyline>
                             <polyline points="9 21 3 21 3 15"></polyline>
