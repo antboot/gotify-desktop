@@ -36,6 +36,11 @@ mod macos_window {
         fn objc_msgSend();
     }
 
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGWindowLevelForKey(key: i32) -> i32;
+    }
+
     extern "C" {
         static _dispatch_main_q: c_void;
         fn dispatch_async_f(
@@ -150,6 +155,70 @@ mod macos_window {
             dispatch_async_f(&_dispatch_main_q, ctx as *mut c_void, do_set_floating);
         }
     }
+
+    struct DesktopPinCtx { ns_window: *mut c_void, enable: bool }
+    unsafe impl Send for DesktopPinCtx {}
+
+    unsafe extern "C" fn do_set_desktop_pin(ctx: *mut c_void) {
+        let boxed = Box::from_raw(ctx as *mut DesktopPinCtx);
+        let win = boxed.ns_window;
+        if win.is_null() { return; }
+
+        let level_sel    = sel_registerName(b"setLevel:\0".as_ptr() as _);
+        let behavior_sel = sel_registerName(b"setCollectionBehavior:\0".as_ptr() as _);
+        let constrain_sel = sel_registerName(b"constrainFrameRect:toScreen:\0".as_ptr() as _);
+        let types = b"{CGRect={CGPoint=dd}{CGSize=dd}}@:{CGRect={CGPoint=dd}{CGSize=dd}}@\0"
+            .as_ptr() as *const c_char;
+        let imp_fn: unsafe extern "C" fn() = std::mem::transmute(custom_constrain as *const ());
+
+        if boxed.enable {
+            FLOATING_WIN_PTR.store(win as usize, Ordering::Relaxed);
+            let cls = object_getClass(win);
+            let added = class_addMethod(cls, constrain_sel, imp_fn, types);
+            if !added {
+                let m = class_getInstanceMethod(cls, constrain_sel);
+                if !m.is_null() {
+                    method_setImplementation(m, imp_fn);
+                }
+            }
+
+            // kCGDesktopWindowLevelKey = 2. Desktop Icon Level is CGWindowLevelForKey(2) + 1
+            let raw_level = CGWindowLevelForKey(2) as isize;
+            let desktop_level = if raw_level == 0 { -2147483602 } else { raw_level + 1 };
+            msg_isize(win, level_sel, desktop_level);
+
+            // 1: canJoinAllSpaces
+            // 16: stationary (切换 Space 不动)
+            // 64: ignoresCycle (Cmd+Tab 不循环选中)
+            // 256: fullScreenAuxiliary
+            msg_usize(win, behavior_sel, 1 | 16 | 64 | 256);
+
+            // orderBack: 沉在底层壁纸上
+            let order_back_sel = sel_registerName(b"orderBack:\0".as_ptr() as _);
+            let f_order: unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) =
+                std::mem::transmute(objc_msgSend as *const ());
+            f_order(win, order_back_sel, std::ptr::null_mut());
+        } else {
+            FLOATING_WIN_PTR.store(0, Ordering::Relaxed);
+            // Normal Window Level = 0
+            msg_isize(win, level_sel, 0);
+            msg_usize(win, behavior_sel, 0);
+
+            // orderFront:
+            let order_front_sel = sel_registerName(b"orderFront:\0".as_ptr() as _);
+            let f_order: unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) =
+                std::mem::transmute(objc_msgSend as *const ());
+            f_order(win, order_front_sel, std::ptr::null_mut());
+        }
+    }
+
+    pub fn schedule_set_desktop_pin(ns_window: *mut c_void, enable: bool) {
+        if ns_window.is_null() { return; }
+        let ctx = Box::into_raw(Box::new(DesktopPinCtx { ns_window, enable }));
+        unsafe {
+            dispatch_async_f(&_dispatch_main_q, ctx as *mut c_void, do_set_desktop_pin);
+        }
+    }
 }
 
 
@@ -220,6 +289,53 @@ struct WindowPosition {
     y: i32,
     width: u32,
     height: u32,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct WidgetConfig {
+    pub is_widget_mode: bool,
+    pub widget_x: Option<i32>,
+    pub widget_y: Option<i32>,
+    pub widget_width: u32,
+    pub widget_height: u32,
+    pub normal_x: Option<i32>,
+    pub normal_y: Option<i32>,
+    pub normal_width: u32,
+    pub normal_height: u32,
+}
+
+impl Default for WidgetConfig {
+    fn default() -> Self {
+        WidgetConfig {
+            is_widget_mode: false,
+            widget_x: None,
+            widget_y: None,
+            widget_width: 320,
+            widget_height: 220,
+            normal_x: None,
+            normal_y: None,
+            normal_width: 380,
+            normal_height: 600,
+        }
+    }
+}
+
+fn load_widget_config_from_file() -> WidgetConfig {
+    let config_dir = get_config_dir();
+    let config_path = format!("{}/.gotify_widget_config.json", config_dir);
+    if let Ok(content) = std::fs::read_to_string(&config_path) {
+        if let Ok(config) = serde_json::from_str::<WidgetConfig>(&content) {
+            return config;
+        }
+    }
+    WidgetConfig::default()
+}
+
+fn save_widget_config_to_file(config: &WidgetConfig) -> Result<(), String> {
+    let config_dir = get_config_dir();
+    let config_path = format!("{}/.gotify_widget_config.json", config_dir);
+    std::fs::write(&config_path, serde_json::to_string_pretty(&config).unwrap())
+        .map_err(|e| format!("保存小组件配置失败: {}", e))
 }
 
 struct AppState {
@@ -1026,6 +1142,13 @@ pub fn run() {
                     }
                 }
 
+                // 检查并恢复桌面小组件模式
+                let widget_config = load_widget_config_from_file();
+                if widget_config.is_widget_mode {
+                    println!("🖥️ 启动恢复桌面小组件模式: true");
+                    let _ = set_widget_mode(app_handle.clone(), true).await;
+                }
+
                 // 等待 1 秒后自动连接
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
@@ -1057,10 +1180,11 @@ pub fn run() {
 
             println!("🔧 开始创建系统托盘...");
             let toggle_item = MenuItem::with_id(app, "toggle", "显示通知", true, None::<&str>)?;
+            let widget_item = MenuItem::with_id(app, "widget", "🖥️ 切换桌面小组件", true, None::<&str>)?;
             let pin_item = MenuItem::with_id(app, "pin", "窗口置顶", true, None::<&str>)?;
             let settings_item = MenuItem::with_id(app, "settings", "设置", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-            let tray_menu = Menu::with_items(app, &[&toggle_item, &pin_item, &settings_item, &quit_item])?;
+            let tray_menu = Menu::with_items(app, &[&toggle_item, &widget_item, &pin_item, &settings_item, &quit_item])?;
 
             // 加载托盘图标 - macOS 使用单色 Template，Windows 使用彩色图标
             #[cfg(target_os = "macos")]
@@ -1114,6 +1238,12 @@ pub fn run() {
                                 }
                             }
                         }
+                        "widget" => {
+                            let app_handle = app.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let _ = toggle_widget_mode(app_handle).await;
+                            });
+                        }
                         "pin" => {
                             let _ = toggle_window_always_on_top(app.clone());
                         }
@@ -1146,7 +1276,16 @@ pub fn run() {
                     api.prevent_close();
                 }
             }
-            tauri::WindowEvent::Moved(_) => {
+            tauri::WindowEvent::Moved(pos) => {
+                if window.label() == "main" {
+                    let widget_cfg = load_widget_config_from_file();
+                    if widget_cfg.is_widget_mode {
+                        let mut cfg = widget_cfg;
+                        cfg.widget_x = Some(pos.x);
+                        cfg.widget_y = Some(pos.y);
+                        let _ = save_widget_config_to_file(&cfg);
+                    }
+                }
                 // Windows 拖动贴边：在 Moved 事件停止后 200ms 才执行磁性吸附
                 // 用原子令牌实现轻量级防抖，避免拖动过程中窗口跳动
                 #[cfg(target_os = "windows")]
@@ -1207,6 +1346,11 @@ pub fn run() {
             toggle_window_always_on_top,
             start_dragging_window,
             snap_window_to_edge,
+            get_widget_mode,
+            get_widget_config,
+            save_widget_position,
+            set_widget_mode,
+            toggle_widget_mode,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -1455,5 +1599,134 @@ fn start_dragging_window(app: tauri::AppHandle) -> Result<(), String> {
         window.start_dragging().map_err(|e| format!("拖动窗口失败: {}", e))?;
     }
     Ok(())
+}
+
+#[tauri::command]
+fn get_widget_mode() -> bool {
+    load_widget_config_from_file().is_widget_mode
+}
+
+#[tauri::command]
+fn get_widget_config() -> WidgetConfig {
+    load_widget_config_from_file()
+}
+
+#[tauri::command]
+async fn save_widget_position(x: i32, y: i32) -> Result<(), String> {
+    let mut config = load_widget_config_from_file();
+    config.widget_x = Some(x);
+    config.widget_y = Some(y);
+    save_widget_config_to_file(&config)
+}
+
+#[tauri::command]
+async fn set_widget_mode(app: tauri::AppHandle, enable: bool) -> Result<bool, String> {
+    let mut config = load_widget_config_from_file();
+    let window = app.get_webview_window("main")
+        .ok_or_else(|| "找不到主窗口".to_string())?;
+
+    if enable {
+        if !config.is_widget_mode {
+            if let Ok(pos) = window.outer_position() {
+                config.normal_x = Some(pos.x);
+                config.normal_y = Some(pos.y);
+            }
+            if let Ok(size) = window.inner_size() {
+                config.normal_width = size.width;
+                config.normal_height = size.height;
+            }
+        }
+        config.is_widget_mode = true;
+        let _ = save_widget_config_to_file(&config);
+
+        let _ = window.set_decorations(false);
+        let _ = window.set_always_on_top(false);
+
+        let target_w = if config.widget_width > 0 { config.widget_width } else { 320 };
+        let target_h = if config.widget_height > 0 { config.widget_height } else { 220 };
+        let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+            width: target_w as f64,
+            height: target_h as f64,
+        }));
+
+        if let (Some(wx), Some(wy)) = (config.widget_x, config.widget_y) {
+            let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+                x: wx,
+                y: wy,
+            }));
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            if let Ok(ns_win_ptr) = window.ns_window() {
+                macos_window::schedule_set_desktop_pin(
+                    ns_win_ptr as *mut std::ffi::c_void,
+                    true,
+                );
+            }
+        }
+    } else {
+        if config.is_widget_mode {
+            if let Ok(pos) = window.outer_position() {
+                config.widget_x = Some(pos.x);
+                config.widget_y = Some(pos.y);
+            }
+        }
+        config.is_widget_mode = false;
+        let _ = save_widget_config_to_file(&config);
+
+        #[cfg(target_os = "macos")]
+        {
+            if let Ok(ns_win_ptr) = window.ns_window() {
+                macos_window::schedule_set_desktop_pin(
+                    ns_win_ptr as *mut std::ffi::c_void,
+                    false,
+                );
+            }
+        }
+
+        let _ = window.set_decorations(true);
+
+        let target_w = if config.normal_width > 0 { config.normal_width } else { 380 };
+        let target_h = if config.normal_height > 0 { config.normal_height } else { 600 };
+        let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+            width: target_w as f64,
+            height: target_h as f64,
+        }));
+
+        if let (Some(nx), Some(ny)) = (config.normal_x, config.normal_y) {
+            let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+                x: nx,
+                y: ny,
+            }));
+        }
+
+        let always_on_top = get_window_always_on_top(app.clone());
+        if always_on_top {
+            let _ = window.set_always_on_top(true);
+            #[cfg(target_os = "macos")]
+            {
+                if let Ok(ns_win_ptr) = window.ns_window() {
+                    macos_window::schedule_set_floating(
+                        ns_win_ptr as *mut std::ffi::c_void,
+                        true,
+                    );
+                }
+            }
+        }
+
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+
+    let _ = app.emit("tauri://widget-mode-changed", serde_json::json!({ "is_widget_mode": enable }));
+    println!("🖥️ 桌面小组件模式已切换: {}", enable);
+    Ok(enable)
+}
+
+#[tauri::command]
+async fn toggle_widget_mode(app: tauri::AppHandle) -> Result<bool, String> {
+    let current = get_widget_mode();
+    set_widget_mode(app, !current).await
 }
 

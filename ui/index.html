@@ -929,6 +929,246 @@
         .reconnect-btn:hover {
             background: rgba(0, 0, 0, 0.15);
         }
+
+        /* 桌面小组件模式 (Desktop Widget Mode) */
+        body.widget-mode {
+            background: transparent !important;
+            overflow: hidden !important;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body.widget-mode .container {
+            background: transparent !important;
+            min-height: 100vh;
+            height: 100vh;
+            padding: 8px;
+            box-sizing: border-box;
+            display: flex;
+            align-items: stretch;
+            justify-content: stretch;
+        }
+
+        body.widget-mode #appTitlebar,
+        body.widget-mode #connectionBanner,
+        body.widget-mode #notifications,
+        body.widget-mode .theme-toggle,
+        body.widget-mode #clearAllBtn {
+            display: none !important;
+        }
+
+        .desktop-widget-card {
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.78);
+            backdrop-filter: blur(28px) saturate(180%);
+            -webkit-backdrop-filter: blur(28px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.65);
+            border-radius: 18px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.05);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            box-sizing: border-box;
+            color: #1a1a2e;
+        }
+
+        [data-theme="dark"] .desktop-widget-card {
+            background: rgba(22, 26, 35, 0.82);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.25);
+            color: #e5e7eb;
+        }
+
+        .widget-header {
+            height: 34px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            -webkit-app-region: drag;
+            cursor: grab;
+            user-select: none;
+            flex-shrink: 0;
+        }
+
+        [data-theme="dark"] .widget-header {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .widget-status {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            -webkit-app-region: drag;
+        }
+
+        .widget-indicator {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #10b981;
+            box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+            display: inline-block;
+        }
+
+        .widget-indicator.offline {
+            background: #ef4444;
+            box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+        }
+
+        .widget-badge {
+            background: var(--accent);
+            color: #ffffff;
+            font-size: 10px;
+            font-weight: bold;
+            padding: 1px 6px;
+            border-radius: 10px;
+            line-height: 1.3;
+        }
+
+        .widget-badge.hidden {
+            display: none;
+        }
+
+        .widget-actions {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            -webkit-app-region: no-drag;
+        }
+
+        .widget-btn {
+            background: transparent;
+            border: none;
+            width: 22px;
+            height: 22px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 11px;
+            color: inherit;
+            opacity: 0.6;
+            transition: all 0.2s ease;
+        }
+
+        .widget-btn:hover {
+            opacity: 1;
+            background: rgba(0, 0, 0, 0.08);
+            transform: scale(1.05);
+        }
+
+        [data-theme="dark"] .widget-btn:hover {
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .widget-body {
+            flex: 1;
+            padding: 8px 10px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .widget-body::-webkit-scrollbar {
+            width: 3px;
+        }
+
+        .widget-body::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.15);
+            border-radius: 3px;
+        }
+
+        [data-theme="dark"] .widget-body::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .widget-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            opacity: 0.5;
+            font-size: 11px;
+            gap: 4px;
+            padding: 20px 0;
+            text-align: center;
+        }
+
+        .widget-empty-icon {
+            font-size: 20px;
+        }
+
+        .widget-item {
+            background: rgba(255, 255, 255, 0.6);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            border-radius: 10px;
+            padding: 7px 9px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        [data-theme="dark"] .widget-item {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .widget-item:hover {
+            background: rgba(255, 255, 255, 0.88);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+        }
+
+        [data-theme="dark"] .widget-item:hover {
+            background: rgba(255, 255, 255, 0.09);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+        }
+
+        .widget-item-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .widget-item-title {
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 190px;
+        }
+
+        .widget-item-time {
+            font-size: 9px;
+            opacity: 0.55;
+            flex-shrink: 0;
+        }
+
+        .widget-item-desc {
+            opacity: 0.8;
+            font-size: 10.5px;
+            line-height: 1.35;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            word-break: break-word;
+        }
     </style>
 </head>
 
@@ -966,6 +1206,14 @@
                 </div>
             </div>
             <div class="titlebar-actions" style="-webkit-app-region: no-drag;">
+                <button id="widgetModeBtn" class="pin-window-btn" onclick="toggleDesktopWidgetMode(event)" onmousedown="event.stopPropagation()" onpointerdown="event.stopPropagation()"
+                    title="钉在桌面 (小组件模式)" style="-webkit-app-region: no-drag;">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                        <line x1="8" y1="21" x2="16" y2="21"></line>
+                        <line x1="12" y1="17" x2="12" y2="21"></line>
+                    </svg>
+                </button>
                 <button id="pinWindowBtn" class="pin-window-btn" onclick="toggleWindowAlwaysOnTop(event)" onmousedown="event.stopPropagation()" onpointerdown="event.stopPropagation()"
                     title="窗口置顶" style="-webkit-app-region: no-drag;">
                     <svg viewBox="0 0 1024 1024" width="13" height="13" fill="currentColor">
@@ -988,8 +1236,32 @@
             </div>
         </div>
 
+        <!-- 桌面小组件模式视图 (Desktop Widget View) -->
+        <div id="desktopWidgetView" class="desktop-widget-card" style="display: none;" ondblclick="toggleDesktopWidgetMode(event)">
+            <div class="widget-header" data-tauri-drag-region>
+                <div class="widget-status" data-tauri-drag-region>
+                    <span id="widgetStatusDot" class="widget-indicator"></span>
+                    <span class="widget-title">Gotify</span>
+                    <span id="widgetBadge" class="widget-badge hidden">0</span>
+                </div>
+                <div class="widget-actions">
+                    <button class="widget-btn" onclick="clearAllNotifications()" title="清除通知">🗑️</button>
+                    <button class="widget-btn" onclick="toggleDesktopWidgetMode(event)" title="展开完整窗口">⤢</button>
+                </div>
+            </div>
+            <div id="widgetMessageList" class="widget-body">
+                <div class="widget-empty">
+                    <div class="widget-empty-icon">🔔</div>
+                    <div class="widget-empty-text">桌面常驻中 · 暂无新消息</div>
+                </div>
+            </div>
+        </div>
+
         <!-- 右键菜单 -->
         <div id="contextMenu" class="context-menu">
+            <div class="context-menu-item" onclick="toggleDesktopWidgetMode(event)">
+                <span id="contextMenuWidgetIcon">🖥️</span> <span id="contextMenuWidgetText" data-i18n="desktopWidget">钉在桌面小组件</span>
+            </div>
             <div class="context-menu-item" onclick="toggleWindowAlwaysOnTop(event)">
                 <span id="contextMenuPinIcon">📌</span> <span id="contextMenuPinText" data-i18n="pinWindow">窗口置顶</span>
             </div>
@@ -1078,11 +1350,125 @@
             }
         }
 
+        // 桌面小组件模式 (Desktop Widget Mode)
+        let isDesktopWidgetMode = false;
+
+        function updateWidgetButtonUI(isWidget) {
+            isDesktopWidgetMode = isWidget;
+            const btn = document.getElementById('widgetModeBtn');
+            if (btn) {
+                if (isWidget) {
+                    btn.classList.add('pinned');
+                    btn.setAttribute('aria-pressed', 'true');
+                    btn.title = (typeof t === 'function' ? t('exitDesktopWidget') : null) || '还原完整窗口';
+                } else {
+                    btn.classList.remove('pinned');
+                    btn.setAttribute('aria-pressed', 'false');
+                    btn.title = (typeof t === 'function' ? t('enterDesktopWidget') : null) || '钉在桌面 (小组件模式)';
+                }
+            }
+            const contextWidgetText = document.getElementById('contextMenuWidgetText');
+            if (contextWidgetText) {
+                contextWidgetText.textContent = isWidget ? 
+                    ((typeof t === 'function' ? t('exitDesktopWidget') : null) || '还原完整窗口') : 
+                    ((typeof t === 'function' ? t('enterDesktopWidget') : null) || '钉在桌面小组件');
+            }
+
+            // 更新容器样式
+            if (isWidget) {
+                document.body.classList.add('widget-mode');
+                const widgetView = document.getElementById('desktopWidgetView');
+                if (widgetView) widgetView.style.display = 'flex';
+                renderWidgetNotifications();
+            } else {
+                document.body.classList.remove('widget-mode');
+                const widgetView = document.getElementById('desktopWidgetView');
+                if (widgetView) widgetView.style.display = 'none';
+            }
+        }
+
+        async function initDesktopWidgetMode() {
+            try {
+                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                    const isWidget = await window.__TAURI_INTERNALS__.invoke('get_widget_mode');
+                    updateWidgetButtonUI(isWidget);
+                    console.log('🖥️ 初始桌面小组件模式:', isWidget);
+                }
+            } catch (e) {
+                console.warn('⚠️ 获取初始桌面小组件模式失败:', e);
+            }
+        }
+
+        async function toggleDesktopWidgetMode(event) {
+            if (event) {
+                if (typeof event.preventDefault === 'function') event.preventDefault();
+                if (typeof event.stopPropagation === 'function') event.stopPropagation();
+            }
+            const menu = document.getElementById('contextMenu');
+            if (menu) menu.style.display = 'none';
+
+            const targetState = !isDesktopWidgetMode;
+            updateWidgetButtonUI(targetState);
+
+            try {
+                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                    const result = await window.__TAURI_INTERNALS__.invoke('set_widget_mode', { enable: targetState });
+                    updateWidgetButtonUI(result);
+                    console.log('🖥️ 桌面小组件模式已设置:', result);
+                }
+            } catch (e) {
+                console.error('❌ 切换桌面小组件模式失败:', e);
+                updateWidgetButtonUI(!targetState);
+            }
+        }
+
+        function renderWidgetNotifications() {
+            const listEl = document.getElementById('widgetMessageList');
+            const badgeEl = document.getElementById('widgetBadge');
+            if (!listEl) return;
+
+            if (badgeEl) {
+                if (typeof notifications !== 'undefined' && notifications && notifications.length > 0) {
+                    badgeEl.textContent = notifications.length;
+                    badgeEl.classList.remove('hidden');
+                } else {
+                    badgeEl.classList.add('hidden');
+                }
+            }
+
+            if (typeof notifications === 'undefined' || !notifications || notifications.length === 0) {
+                listEl.innerHTML = `
+                    <div class="widget-empty">
+                        <div class="widget-empty-icon">🔔</div>
+                        <div class="widget-empty-text">桌面常驻中 · 暂无新消息</div>
+                    </div>
+                `;
+                return;
+            }
+
+            // 展示最新的 3 条消息
+            const topList = notifications.slice(0, 3);
+            listEl.innerHTML = topList.map(notif => {
+                const timeAgo = formatTime(notif.date);
+                const priorityClass = getPriorityClass(notif.priority);
+                const cleanMsg = (notif.message || '').replace(/<[^>]*>?/gm, '');
+                return `
+                    <div class="widget-item priority-${priorityClass}" onclick="toggleDesktopWidgetMode(event)" title="双击展开主界面">
+                        <div class="widget-item-header">
+                            <span class="widget-item-title">${escapeHtml(notif.title || 'Gotify 通知')}</span>
+                            <span class="widget-item-time">${timeAgo}</span>
+                        </div>
+                        <div class="widget-item-desc">${escapeHtml(cleanMsg)}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
         // 窗口拖动事件处理
         function onTitlebarMouseDown(event) {
             if (!event) return;
-            // 排除置顶按钮及按钮区域，只响应主按键（鼠标左键）
-            if (event.target.closest('#pinWindowBtn') || event.target.closest('.titlebar-actions') || event.button !== 0) {
+            // 排除置顶按钮、小组件按钮及按钮区域，只响应主按键（鼠标左键）
+            if (event.target.closest('#pinWindowBtn') || event.target.closest('#widgetModeBtn') || event.target.closest('.titlebar-actions') || event.button !== 0) {
                 return;
             }
             try {
@@ -1275,6 +1661,7 @@
         initContextMenu();
         updateTranslations();
         initWindowAlwaysOnTop();
+        initDesktopWidgetMode();
 
         function openSettings() {
             document.getElementById('contextMenu').style.display = 'none';
@@ -1414,6 +1801,16 @@
                     });
                     console.log('✅ always-on-top 状态监听器注册成功！');
 
+                    // 注册 widget-mode 状态监听器
+                    console.log('正在注册 widget-mode 状态监听器...');
+                    const unlistenWidget = await listen('tauri://widget-mode-changed', (event) => {
+                        console.log('🖥️ 收到 tauri://widget-mode-changed 事件:', event.payload);
+                        if (event && event.payload && typeof event.payload.is_widget_mode === 'boolean') {
+                            updateWidgetButtonUI(event.payload.is_widget_mode);
+                        }
+                    });
+                    console.log('✅ widget-mode 状态监听器注册成功！');
+
                     // 检查初始 WebSocket 状态
                     try {
                         const { invoke } = window.__TAURI_INTERNALS__;
@@ -1453,6 +1850,9 @@
                     // 初始化窗口置顶状态
                     await initWindowAlwaysOnTop();
 
+                    // 初始化桌面小组件状态
+                    await initDesktopWidgetMode();
+
                 } catch (error) {
                     console.error('❌❌❌ 注册监听器时出错:');
                     console.error('错误对象:', error);
@@ -1466,6 +1866,7 @@
                         await initWindowPositionTracking();
                         await initSystemThemeListener();
                         await initWindowAlwaysOnTop();
+                        await initDesktopWidgetMode();
                     } catch (e) {
                         console.error('恢复失败:', e);
                     }
@@ -1531,6 +1932,7 @@
                 `;
                 if (clearAllBtn) clearAllBtn.classList.remove('visible');
                 document.documentElement.classList.remove('has-clear-all');
+                renderWidgetNotifications();
                 return;
             }
 
@@ -1591,6 +1993,8 @@
                     }
                 }
             });
+
+            renderWidgetNotifications();
         }
 
         function toggleExpand(id) {
@@ -1683,6 +2087,15 @@
             } else {
                 banner.className = 'connection-banner';
                 textEl.textContent = '⚠️ ' + t('disconnected');
+            }
+
+            const widgetDot = document.getElementById('widgetStatusDot');
+            if (widgetDot) {
+                if (status === 'connected') {
+                    widgetDot.classList.remove('offline');
+                } else {
+                    widgetDot.classList.add('offline');
+                }
             }
         }
 
