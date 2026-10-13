@@ -4,5 +4,12 @@
 <dict>
     <key>NSLocalNetworkUsageDescription</key>
     <string>Gotify Notifier 需要访问本地局域网以连接 Gotify 服务器获取推送通知。</string>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
 </dict>
 </plist>

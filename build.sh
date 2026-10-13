@@ -1,38 +1,81 @@
 #!/bin/bash
 
-# Gotify Notifier 构建脚本
+# ==============================================================================
+# Gotify Notifier 统一构建与发布脚本
+# 支持自动解决 macOS 27 本地网络权限与代码签名问题 (os error 65)
+# 用法:
+#   ./build.sh          -> 标准 Release 生产构建、签名、打包 DMG
+#   ./build.sh --run    -> 构建、签名并立即启动运行测试
+#   ./build.sh --debug  -> 快速 Debug 增量构建、签名
+# ==============================================================================
 
-echo "🚀 开始构建 Gotify Notifier..."
+set -e
 
-# 检查 Rust 是否安装
+DO_RUN=false
+BUILD_MODE="release"
+BUILD_FLAG=""
+
+for arg in "$@"; do
+    case $arg in
+        --run|-r)
+            DO_RUN=true
+            shift
+            ;;
+        --debug|-d)
+            BUILD_MODE="debug"
+            BUILD_FLAG="--debug"
+            shift
+            ;;
+    esac
+done
+
+echo "🚀 开始构建 Gotify Notifier [模式: $BUILD_MODE]..."
+
+# 1. 检查 Rust 环境
 if ! command -v cargo &> /dev/null; then
     echo "❌ Rust 未安装，请先安装 Rust:"
     echo "   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
     exit 1
 fi
 
-echo "✅ Rust 已安装"
-
-# 检查 Tauri CLI
+# 2. 检查 Tauri CLI
 if ! command -v cargo-tauri &> /dev/null; then
     echo "📦 安装 Tauri CLI..."
     cargo install tauri-cli
 fi
 
-echo "✅ Tauri CLI 已准备就绪"
+# 3. 如果当前有正在运行的实例，友好退出
+if pgrep -x "gotify-notifier" > /dev/null; then
+    echo "⚠️ 检测到正在运行的 Gotify Notifier，正在关闭以完成更新..."
+    killall "gotify-notifier" 2>/dev/null || true
+    sleep 1
+fi
 
-# 构建应用
-echo "🔨 开始构建应用（这可能需要几分钟）..."
-cargo tauri build
-
-if [ $? -eq 0 ]; then
+# 4. 执行 Tauri 构建
+echo "🔨 正在编译应用..."
+if [ "$BUILD_MODE" = "debug" ]; then
+    cargo tauri build --debug
+    APP_PATH="src-tauri/target/debug/bundle/macos/Gotify Notifier.app"
+    DMG_DIR="src-tauri/target/debug/bundle/dmg"
+else
+    cargo tauri build
     APP_PATH="src-tauri/target/release/bundle/macos/Gotify Notifier.app"
     DMG_DIR="src-tauri/target/release/bundle/dmg"
-    if [ -d "$APP_PATH" ]; then
-        echo "🔏 正在对应用进行规范签名 (绑定 identifier com.gotify.notifier 避免 macOS 27 本地网络拦截)..."
-        codesign --force --deep --sign - --identifier "com.gotify.notifier" "$APP_PATH"
-        echo "✅ 签名完成"
+fi
 
+# 5. 核心：macOS 规范代码签名与资源密封（彻底根治 os error 65: No route to host）
+if [ -d "$APP_PATH" ]; then
+    echo "🔏 正在对应用执行深度签名 (强制绑定 com.gotify.notifier 标识符与权限声明)..."
+    codesign --force --deep --sign - --identifier "com.gotify.notifier" "$APP_PATH"
+    
+    # 验证签名绑定
+    SIGN_ID=$(codesign -dvvv "$APP_PATH" 2>&1 | grep "Identifier=com.gotify.notifier" || true)
+    if [ -n "$SIGN_ID" ]; then
+        echo "✅ 代码签名绑定成功: com.gotify.notifier"
+    fi
+
+    # 重新打包 DMG (如果是 Release 构建)
+    if [ "$BUILD_MODE" = "release" ] && [ -d "$DMG_DIR" ]; then
         echo "📦 正在重新打包包含已签名 App 的 DMG 安装包..."
         TMP_DMG_DIR=$(mktemp -d)
         cp -R "$APP_PATH" "$TMP_DMG_DIR/"
@@ -41,19 +84,25 @@ if [ $? -eq 0 ]; then
         if [ -n "$DMG_FILE" ]; then
             rm -f "$DMG_FILE"
             hdiutil create -volname "Gotify Notifier" -srcfolder "$TMP_DMG_DIR" -ov -format UDZO "$DMG_FILE" > /dev/null 2>&1
-            echo "✅ DMG 重新打包完成: $DMG_FILE"
+            echo "✅ DMG 安装包打包完成: $DMG_FILE"
         fi
         rm -rf "$TMP_DMG_DIR"
     fi
 
-    echo ""
-    echo "✅ 构建成功！"
-    echo ""
-    echo "📱 应用位置:"
-    echo "   $APP_PATH"
-    echo ""
-    echo "🎉 你可以将应用拖动到 Applications 文件夹中使用"
-else
-    echo "❌ 构建失败，请检查错误信息"
-    exit 1
+    # 自动同步更新到系统的 /Applications/Gotify Notifier.app
+    echo "📲 正在同步安装到 /Applications..."
+    rm -rf "/Applications/Gotify Notifier.app"
+    cp -R "$APP_PATH" "/Applications/"
+    codesign --force --deep --sign - --identifier "com.gotify.notifier" "/Applications/Gotify Notifier.app"
+    echo "✅ /Applications/Gotify Notifier.app 更新并签名成功"
+fi
+
+echo ""
+echo "🎉 构建与签名全部完成！"
+echo "📱 生产应用位置: /Applications/Gotify Notifier.app"
+
+# 6. 若传入了 --run，则立即启动
+if [ "$DO_RUN" = true ]; then
+    echo "🚀 正在启动 Gotify Notifier..."
+    open "/Applications/Gotify Notifier.app"
 fi
