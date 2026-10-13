@@ -304,7 +304,7 @@ struct WindowPosition {
 }
 
 fn default_widget_opacity() -> f64 {
-    0.45
+    0.70
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -334,7 +334,7 @@ impl Default for WidgetConfig {
             normal_y: None,
             normal_width: 380,
             normal_height: 600,
-            opacity: 0.45,
+            opacity: 0.70,
         }
     }
 }

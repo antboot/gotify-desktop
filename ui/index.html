@@ -25,6 +25,7 @@
             --card-bg: #ffffff;
             --header-bg: #ffffff;
             --empty-text: #9ca3af;
+            --widget-opacity: 0.70;
         }
 
         [data-theme="dark"] {
@@ -966,37 +967,26 @@
             display: none !important;
         }
 
-        .desktop-widget-card {
-        :root {
-            --widget-opacity: 0.45;
-        }
-
+        /* 桌面小组件卡片：正宗 Apple 原生 Squircle 连续大圆角与液态玻璃质感 */
         .desktop-widget-card {
             position: relative;
             width: 100%;
             height: 100%;
-            /* 苹果原生连续 Squircle 圆角 */
-            border-radius: 24px;
-            /* 苹果液态玻璃层叠渐变：顶部微光反射 + 超高通透底色 */
-            background: linear-gradient(135deg,
-                rgba(255, 255, 255, calc(var(--widget-opacity, 0.45) * 0.45)) 0%,
-                rgba(255, 255, 255, calc(var(--widget-opacity, 0.45) * 0.12)) 35%,
-                rgba(255, 255, 255, 0.04) 100%),
-                rgba(242, 245, 252, var(--widget-opacity, 0.45));
-            backdrop-filter: blur(48px) saturate(215%) brightness(104%);
-            -webkit-backdrop-filter: blur(48px) saturate(215%) brightness(104%);
-            /* 双层超细高光边框 */
-            border: 1px solid rgba(255, 255, 255, 0.55);
-            /* 顶部内切削镜面反光与柔和阴影 */
+            border-radius: 26px !important;
+            /* 默认苹果深色半透液态玻璃质感（参见原生电池挂件） */
+            background: rgba(22, 28, 42, var(--widget-opacity, 0.70)) !important;
+            backdrop-filter: blur(48px) saturate(210%) brightness(102%) !important;
+            -webkit-backdrop-filter: blur(48px) saturate(210%) brightness(102%) !important;
+            border: 1px solid rgba(255, 255, 255, 0.16) !important;
             box-shadow:
-                inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.75),
-                inset 0 0 0 0.5px rgba(255, 255, 255, 0.25),
-                0 16px 40px rgba(0, 0, 0, 0.15);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            box-sizing: border-box;
-            color: #1a1a2e;
+                inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.32),
+                inset 0 0 0 0.5px rgba(255, 255, 255, 0.08),
+                0 18px 45px rgba(0, 0, 0, 0.45) !important;
+            display: flex !important;
+            flex-direction: column !important;
+            overflow: hidden !important;
+            box-sizing: border-box !important;
+            color: #f3f4f6 !important;
             user-select: none;
             -webkit-user-select: none;
             pointer-events: auto !important;
@@ -1004,37 +994,28 @@
             cursor: grab;
         }
 
-        [data-theme="dark"] .desktop-widget-card {
-            background: linear-gradient(135deg,
-                rgba(255, 255, 255, calc(var(--widget-opacity, 0.45) * 0.22)) 0%,
-                rgba(255, 255, 255, calc(var(--widget-opacity, 0.45) * 0.04)) 40%,
-                rgba(0, 0, 0, 0.15) 100%),
-                rgba(15, 20, 32, var(--widget-opacity, 0.45));
-            backdrop-filter: blur(52px) saturate(220%) brightness(102%);
-            -webkit-backdrop-filter: blur(52px) saturate(220%) brightness(102%);
-            border: 1px solid rgba(255, 255, 255, 0.15);
+        /* 浅色主题模式适配（晶莹水晶白） */
+        [data-theme="light"] .desktop-widget-card {
+            background: rgba(245, 247, 252, var(--widget-opacity, 0.70)) !important;
+            border: 1px solid rgba(255, 255, 255, 0.65) !important;
             box-shadow:
-                inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.35),
-                inset 0 0 0 0.5px rgba(255, 255, 255, 0.1),
-                0 20px 48px rgba(0, 0, 0, 0.5);
-            color: #f3f4f6;
+                inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.85),
+                inset 0 0 0 0.5px rgba(255, 255, 255, 0.35),
+                0 14px 36px rgba(0, 0, 0, 0.12) !important;
+            color: #1a1a2e !important;
         }
 
         .widget-header {
-            height: 40px;
-            padding: 0 12px 0 16px;
+            height: 42px;
+            padding: 0 14px 0 16px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+            border-bottom: none !important;
             flex-shrink: 0;
             pointer-events: auto !important;
             cursor: grab;
             -webkit-app-region: drag;
-        }
-
-        [data-theme="dark"] .widget-header {
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
         }
 
         .widget-status {
@@ -1339,7 +1320,9 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            width: 100%;
             height: 100%;
+            min-height: 120px;
             gap: 12px;
             padding: 20px 0;
             text-align: center;
@@ -1349,31 +1332,41 @@
         }
 
         .widget-empty-icon-wrap {
-            width: 50px;
-            height: 50px;
+            width: 56px;
+            height: 56px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.02) 100%);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.25), 0 4px 16px rgba(0, 0, 0, 0.2);
-            color: inherit;
-            opacity: 0.7;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.02) 100%);
+            border: 1.5px solid rgba(255, 255, 255, 0.18);
+            box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), 0 8px 24px rgba(0, 0, 0, 0.35);
+            color: #ffffff;
+            opacity: 0.9;
             transition: all 0.3s ease;
         }
 
         [data-theme="light"] .widget-empty-icon-wrap {
             background: radial-gradient(circle, rgba(0, 0, 0, 0.04) 0%, rgba(0, 0, 0, 0.01) 100%);
-            border: 1px solid rgba(0, 0, 0, 0.06);
+            border: 1.5px solid rgba(0, 0, 0, 0.08);
             box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.8), 0 4px 12px rgba(0, 0, 0, 0.04);
+            color: #1a1a2e;
+        }
+
+        .liquid-bell-icon {
+            color: currentColor;
+            filter: drop-shadow(0 2px 8px rgba(255, 255, 255, 0.25));
         }
 
         .widget-empty-text {
             font-size: 12px;
             font-weight: 500;
             letter-spacing: -0.1px;
-            opacity: 0.55;
+            color: rgba(255, 255, 255, 0.65);
+        }
+
+        [data-theme="light"] .widget-empty-text {
+            color: rgba(0, 0, 0, 0.55);
         }
 
         .widget-item {
@@ -1601,15 +1594,15 @@
             <div id="widgetOpacityPopover" class="widget-opacity-popover" style="display: none;" onmousedown="event.stopPropagation()">
                 <div class="popover-header">
                     <span class="popover-title">液态玻璃透明度</span>
-                    <span id="opacityValLabel" class="opacity-val-badge">45%</span>
+                    <span id="opacityValLabel" class="opacity-val-badge">70%</span>
                 </div>
                 <div class="popover-slider-row">
-                    <input type="range" id="widgetOpacitySlider" min="10" max="100" value="45" oninput="onOpacitySliderInput(event)" onchange="onOpacitySliderChange(event)" />
+                    <input type="range" id="widgetOpacitySlider" min="10" max="100" value="70" oninput="onOpacitySliderInput(event)" onchange="onOpacitySliderChange(event)" />
                 </div>
                 <div class="popover-presets">
                     <button class="preset-chip" onclick="applyOpacityPreset(0.20)">20% 超透</button>
-                    <button class="preset-chip active" onclick="applyOpacityPreset(0.45)">45% 原液</button>
-                    <button class="preset-chip" onclick="applyOpacityPreset(0.70)">70% 磨砂</button>
+                    <button class="preset-chip" onclick="applyOpacityPreset(0.45)">45% 灵动</button>
+                    <button class="preset-chip active" onclick="applyOpacityPreset(0.70)">70% 原装</button>
                     <button class="preset-chip" onclick="applyOpacityPreset(0.95)">95% 实感</button>
                 </div>
             </div>
@@ -1831,10 +1824,10 @@
         }
 
         // 透明度管理
-        let currentWidgetOpacity = 0.45;
+        let currentWidgetOpacity = 0.70;
 
         function setWidgetOpacity(opacity, persist = true) {
-            const val = Math.max(0.05, Math.min(1.0, parseFloat(opacity) || 0.45));
+            const val = Math.max(0.05, Math.min(1.0, parseFloat(opacity) || 0.70));
             currentWidgetOpacity = val;
             document.documentElement.style.setProperty('--widget-opacity', val.toString());
 
