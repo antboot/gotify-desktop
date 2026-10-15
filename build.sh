@@ -54,11 +54,11 @@ fi
 # 4. 执行 Tauri 构建
 echo "🔨 正在编译应用..."
 if [ "$BUILD_MODE" = "debug" ]; then
-    cargo tauri build --debug
+    cargo tauri build --debug --bundles app
     APP_PATH="src-tauri/target/debug/bundle/macos/Gotify Notifier.app"
     DMG_DIR="src-tauri/target/debug/bundle/dmg"
 else
-    cargo tauri build
+    cargo tauri build --bundles app
     APP_PATH="src-tauri/target/release/bundle/macos/Gotify Notifier.app"
     DMG_DIR="src-tauri/target/release/bundle/dmg"
 fi
@@ -84,18 +84,17 @@ if [ -d "$APP_PATH" ]; then
         echo "✅ 代码签名绑定成功: com.gotify.notifier"
     fi
 
-    # 重新打包 DMG (如果是 Release 构建)
-    if [ "$BUILD_MODE" = "release" ] && [ -d "$DMG_DIR" ]; then
-        echo "📦 正在重新打包包含已签名 App 的 DMG 安装包..."
+    # 生成包含签名后 App 的 DMG (如果是 Release 构建)
+    if [ "$BUILD_MODE" = "release" ]; then
+        echo "📦 正在打包包含已签名 App 的 DMG 安装包..."
+        mkdir -p "$DMG_DIR"
         TMP_DMG_DIR=$(mktemp -d)
         cp -R "$APP_PATH" "$TMP_DMG_DIR/"
         ln -s /Applications "$TMP_DMG_DIR/Applications"
-        DMG_FILE=$(find "$DMG_DIR" -name "*.dmg" -maxdepth 1 | head -n 1)
-        if [ -n "$DMG_FILE" ]; then
-            rm -f "$DMG_FILE"
-            hdiutil create -volname "Gotify Notifier" -srcfolder "$TMP_DMG_DIR" -ov -format UDZO "$DMG_FILE" > /dev/null 2>&1
-            echo "✅ DMG 安装包打包完成: $DMG_FILE"
-        fi
+        DMG_FILE="$DMG_DIR/Gotify Notifier_0.4.0_aarch64.dmg"
+        rm -f "$DMG_FILE"
+        hdiutil create -volname "Gotify Notifier" -srcfolder "$TMP_DMG_DIR" -ov -format UDZO "$DMG_FILE" > /dev/null 2>&1
+        echo "✅ DMG 安装包打包完成: $DMG_FILE"
         rm -rf "$TMP_DMG_DIR"
     fi
 

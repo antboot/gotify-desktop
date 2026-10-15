@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tauri::{Emitter, Manager, State};
 use tauri::tray::{TrayIconBuilder, TrayIcon};
 use futures_util::{SinkExt, StreamExt};
@@ -427,6 +427,10 @@ struct AppState {
     /// 先等待后比对，令牌一致才执行，否则放弃（同一时刻只有最后一次生效）
     #[allow(dead_code)]
     snap_debounce_token: Arc<AtomicU64>,
+    /// 启动与模式切换期间抑制位置与尺寸保存，防止过渡过程中的中间事件污染持久化坐标
+    is_suppressing_save: Arc<AtomicBool>,
+    /// 小组件移动防抖持久化令牌
+    widget_move_debounce_token: Arc<AtomicU64>,
 }
 
 fn emit_status(app: &tauri::AppHandle, ws_status: &Arc<Mutex<String>>, status: &str) {
@@ -1141,6 +1145,8 @@ pub fn run() {
             window_position: Arc::new(Mutex::new(None)),
             tray_icon: Arc::new(Mutex::new(None)),
             snap_debounce_token: Arc::new(AtomicU64::new(0)),
+            is_suppressing_save: Arc::new(AtomicBool::new(true)),
+            widget_move_debounce_token: Arc::new(AtomicU64::new(0)),
         })
         .setup(|app| {
             // macOS: 根据用户设置决定是否显示 Dock 图标
@@ -1182,83 +1188,83 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 let state: tauri::State<AppState> = app_handle.state();
                 
-                // 加载保存的窗口位置
                 let config_dir = get_config_dir();
-                let config_path = format!("{}/.gotify_window_position.json", config_dir);
-                
-                // 确保窗口可见且未最小化（Windows 兼容性）
+                let widget_config = load_widget_config_from_file();
+
+                // 确保窗口可见且未最小化（跨平台兼容性）
                 let _ = main_window.unminimize();
                 let _ = main_window.show();
                 let _ = main_window.set_focus();
-                
-                let mut should_restore = false;
-                
-                if let Ok(content) = std::fs::read_to_string(&config_path) {
-                    if let Ok(position) = serde_json::from_str::<WindowPosition>(&content) {
-                        // 验证位置有效性：不能是屏幕外的极端坐标
-                        let is_valid = position.x > -10000 && position.y > -10000 && 
-                                      position.width > 0 && position.height > 0 &&
-                                      position.width < 10000 && position.height < 10000;
-                        
-                        if is_valid {
-                            println!("🪟 恢复窗口位置: x={}, y={}, w={}, h={}", position.x, position.y, position.width, position.height);
-                            
-                            // 设置窗口位置和大小 - 统一使用外部坐标
-                            let _ = main_window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
-                                x: position.x,
-                                y: position.y,
-                            }));
-                            let _ = main_window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
-                                width: position.width,
-                                height: position.height,
-                            }));
-                            
-                            // 更新状态
-                            let mut window_position = state.window_position.lock().unwrap();
-                            *window_position = Some(position);
-                            should_restore = true;
-                        } else {
-                            println!("⚠️ 保存的窗口位置无效（x={}, y={}, w={}, h={}），将重置", position.x, position.y, position.width, position.height);
-                            // 删除无效的保存文件
-                            let _ = std::fs::remove_file(&config_path);
-                        }
-                    }
-                } else {
-                    println!("ℹ️ 未找到保存的窗口位置，使用默认位置");
-                }
-                
-                // 如果没有成功恢复位置，则居中显示
-                if !should_restore {
-                    let _ = main_window.center();
-                }
 
-                // 恢复窗口置顶状态
-                let always_on_top_path = format!("{}/.gotify_always_on_top.json", config_dir);
-                if let Ok(content) = std::fs::read_to_string(&always_on_top_path) {
-                    if let Ok(always_on_top) = serde_json::from_str::<bool>(&content) {
-                        if always_on_top {
-                            println!("📌 恢复窗口置顶状态: true");
-                            let _ = main_window.set_always_on_top(true);
-                            // macOS: 必须在主线程调用 Cocoa API
-                            #[cfg(target_os = "macos")]
-                            {
-                                if let Ok(ns_win_ptr) = main_window.ns_window() {
-                                    macos_window::schedule_set_floating(
-                                        ns_win_ptr as *mut std::ffi::c_void,
-                                        true,
-                                    );
+                if widget_config.is_widget_mode {
+                    println!("🖥️ 启动恢复桌面小组件模式 (保留保存的坐标，跳过常规窗口恢复)");
+                    let _ = set_widget_mode(app_handle.clone(), true).await;
+                } else {
+                    // 仅在常规窗口模式下恢复常规窗口坐标与尺寸
+                    let config_path = format!("{}/.gotify_window_position.json", config_dir);
+                    let mut should_restore = false;
+
+                    if let Ok(content) = std::fs::read_to_string(&config_path) {
+                        if let Ok(position) = serde_json::from_str::<WindowPosition>(&content) {
+                            let is_valid = position.x > -10000 && position.y > -10000 && 
+                                          position.width > 0 && position.height > 0 &&
+                                          position.width < 10000 && position.height < 10000;
+
+                            if is_valid {
+                                println!("🪟 恢复常规窗口位置: x={}, y={}, w={}, h={}", position.x, position.y, position.width, position.height);
+                                let _ = main_window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+                                    x: position.x,
+                                    y: position.y,
+                                }));
+                                let _ = main_window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
+                                    width: position.width,
+                                    height: position.height,
+                                }));
+
+                                let mut window_position = state.window_position.lock().unwrap();
+                                *window_position = Some(position);
+                                should_restore = true;
+                            } else {
+                                println!("⚠️ 保存的窗口位置无效，将重置: x={}, y={}", position.x, position.y);
+                                let _ = std::fs::remove_file(&config_path);
+                            }
+                        }
+                    } else {
+                        println!("ℹ️ 未找到保存的常规窗口位置，使用默认位置");
+                    }
+
+                    if !should_restore {
+                        let _ = main_window.center();
+                    }
+
+                    // 恢复常规窗口置顶状态
+                    let always_on_top_path = format!("{}/.gotify_always_on_top.json", config_dir);
+                    if let Ok(content) = std::fs::read_to_string(&always_on_top_path) {
+                        if let Ok(always_on_top) = serde_json::from_str::<bool>(&content) {
+                            if always_on_top {
+                                println!("📌 恢复窗口置顶状态: true");
+                                let _ = main_window.set_always_on_top(true);
+                                #[cfg(target_os = "macos")]
+                                {
+                                    if let Ok(ns_win_ptr) = main_window.ns_window() {
+                                        macos_window::schedule_set_floating(
+                                            ns_win_ptr as *mut std::ffi::c_void,
+                                            true,
+                                        );
+                                    }
                                 }
                             }
                         }
                     }
                 }
 
-                // 检查并恢复桌面小组件模式
-                let widget_config = load_widget_config_from_file();
-                if widget_config.is_widget_mode {
-                    println!("🖥️ 启动恢复桌面小组件模式: true");
-                    let _ = set_widget_mode(app_handle.clone(), true).await;
-                }
+                // 启动与初始布局完成后，延时解除事件抑制
+                let suppress_flag = state.is_suppressing_save.clone();
+                tokio::spawn(async move {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                    suppress_flag.store(false, Ordering::SeqCst);
+                    println!("🔓 窗口初始化就绪，已解除位置与尺寸保存抑制");
+                });
 
                 // 等待 1 秒后自动连接
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -1404,35 +1410,55 @@ pub fn run() {
             }
             tauri::WindowEvent::Moved(pos) => {
                 if window.label() == "main" {
-                    let widget_cfg = load_widget_config_from_file();
-                    if widget_cfg.is_widget_mode {
-                        let mut cfg = widget_cfg;
-                        cfg.widget_x = Some(pos.x);
-                        cfg.widget_y = Some(pos.y);
-                        let _ = save_widget_config_to_file(&cfg);
+                    let state: tauri::State<AppState> = window.state();
+                    // 如果正在启动初始化或切换模式，严格禁止保存中间过渡位置
+                    if !state.is_suppressing_save.load(Ordering::SeqCst) {
+                        let widget_cfg = load_widget_config_from_file();
+                        if widget_cfg.is_widget_mode {
+                            let token_arc = state.widget_move_debounce_token.clone();
+                            let current_token = token_arc.fetch_add(1, Ordering::SeqCst) + 1;
+                            let target_x = pos.x;
+                            let target_y = pos.y;
+                            tauri::async_runtime::spawn(async move {
+                                tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                                if token_arc.load(Ordering::SeqCst) == current_token {
+                                    let mut cfg = load_widget_config_from_file();
+                                    if cfg.is_widget_mode {
+                                        cfg.widget_x = Some(target_x);
+                                        cfg.widget_y = Some(target_y);
+                                        let _ = save_widget_config_to_file(&cfg);
+                                        println!("💾 小组件位置已防抖保存: x={}, y={}", target_x, target_y);
+                                    }
+                                }
+                            });
+                        }
                     }
                 }
                 // Windows 拖动贴边：在 Moved 事件停止后 200ms 才执行磁性吸附
-                // 用原子令牌实现轻量级防抖，避免拖动过程中窗口跳动
                 #[cfg(target_os = "windows")]
                 if window.label() == "main" {
                     let state: tauri::State<AppState> = window.state();
-                    let token_arc = state.snap_debounce_token.clone();
-                    // 自增令牌，旧的 spawn 任务检测到令牌变化后会自动放弃
-                    let current_token = token_arc.fetch_add(1, AtomicOrdering::SeqCst) + 1;
-                    let app = window.app_handle().clone();
-                    tauri::async_runtime::spawn(async move {
-                        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-                        // 如果令牌未变（没有新的移动事件），才执行贴边
-                        if token_arc.load(AtomicOrdering::SeqCst) == current_token {
-                            let state: tauri::State<AppState> = app.state();
-                            let _ = save_window_position_auto(app.clone(), state).await;
-                        }
-                    });
+                    if !state.is_suppressing_save.load(Ordering::SeqCst) {
+                        let token_arc = state.snap_debounce_token.clone();
+                        let current_token = token_arc.fetch_add(1, Ordering::SeqCst) + 1;
+                        let app = window.app_handle().clone();
+                        tauri::async_runtime::spawn(async move {
+                            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                            if token_arc.load(Ordering::SeqCst) == current_token {
+                                let state: tauri::State<AppState> = app.state();
+                                let _ = save_window_position_auto(app.clone(), state).await;
+                            }
+                        });
+                    }
                 }
             }
             tauri::WindowEvent::Resized(size) => {
                 if window.label() == "main" {
+                    let state: tauri::State<AppState> = window.state();
+                    if state.is_suppressing_save.load(Ordering::SeqCst) {
+                        return;
+                    }
+
                     let factor = window.scale_factor().unwrap_or(1.0);
                     let logical_w = ((size.width as f64) / factor).round() as u32;
                     let logical_h = ((size.height as f64) / factor).round() as u32;
@@ -1774,6 +1800,9 @@ async fn save_widget_position(x: i32, y: i32) -> Result<(), String> {
 
 #[tauri::command]
 async fn set_widget_mode(app: tauri::AppHandle, enable: bool) -> Result<bool, String> {
+    let state: tauri::State<AppState> = app.state();
+    state.is_suppressing_save.store(true, Ordering::SeqCst);
+
     let mut config = load_widget_config_from_file();
     let window = app.get_webview_window("main")
         .ok_or_else(|| "找不到主窗口".to_string())?;
@@ -1904,6 +1933,13 @@ async fn set_widget_mode(app: tauri::AppHandle, enable: bool) -> Result<bool, St
 
     let _ = app.emit("tauri://widget-mode-changed", serde_json::json!({ "is_widget_mode": enable }));
     println!("🖥️ 桌面小组件模式已切换: {}", enable);
+
+    let suppress_flag = state.is_suppressing_save.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(tokio::time::Duration::from_millis(400)).await;
+        suppress_flag.store(false, Ordering::SeqCst);
+    });
+
     Ok(enable)
 }
 
