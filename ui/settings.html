@@ -330,6 +330,174 @@
         .toggle-group:last-child {
             margin-bottom: 0;
         }
+
+        /* 预览卡片通用基础样式 */
+        .unread-preview-card {
+            position: relative;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 12px 14px;
+            background: var(--section-bg);
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            user-select: none;
+        }
+
+        .unread-preview-priority-bar {
+            width: 3.5px;
+            align-self: stretch;
+            background: #10b981;
+            border-radius: 3px;
+            flex-shrink: 0;
+        }
+
+        /* 6 种新消息未读特效定义 (与主窗口小组件同步) */
+        .unread-effect-aurora {
+            animation: unreadAurora 3s ease-in-out infinite alternate !important;
+            border-color: rgba(99, 102, 241, 0.6) !important;
+        }
+
+        @keyframes unreadAurora {
+            0% {
+                box-shadow: 0 0 14px rgba(99, 102, 241, 0.5), 0 0 26px rgba(236, 72, 153, 0.25);
+                border-color: rgba(99, 102, 241, 0.75);
+            }
+            50% {
+                box-shadow: 0 0 18px rgba(16, 185, 129, 0.5), 0 0 30px rgba(59, 130, 246, 0.3);
+                border-color: rgba(16, 185, 129, 0.8);
+            }
+            100% {
+                box-shadow: 0 0 16px rgba(245, 158, 11, 0.45), 0 0 28px rgba(168, 85, 247, 0.28);
+                border-color: rgba(245, 158, 11, 0.75);
+            }
+        }
+
+        .unread-effect-pulse {
+            animation: unreadPulse 2s ease-in-out infinite !important;
+        }
+
+        @keyframes unreadPulse {
+            0%, 100% {
+                box-shadow: 0 0 4px rgba(59, 130, 246, 0.15);
+                border-color: rgba(59, 130, 246, 0.3);
+                transform: scale(1);
+            }
+            50% {
+                box-shadow: 0 0 18px 3px rgba(59, 130, 246, 0.6);
+                border-color: rgba(59, 130, 246, 0.9);
+                transform: scale(1.012);
+            }
+        }
+
+        .unread-effect-beacon {
+            animation: unreadBeacon 2.4s ease-in-out infinite !important;
+        }
+
+        @keyframes unreadBeacon {
+            0%, 100% {
+                box-shadow: 0 0 4px rgba(245, 158, 11, 0.15);
+                border-color: rgba(245, 158, 11, 0.3);
+            }
+            14% {
+                box-shadow: 0 0 22px 3px rgba(245, 158, 11, 0.8);
+                border-color: rgba(245, 158, 11, 0.95);
+            }
+            26% {
+                box-shadow: 0 0 6px rgba(245, 158, 11, 0.25);
+            }
+            40% {
+                box-shadow: 0 0 22px 3px rgba(245, 158, 11, 0.8);
+                border-color: rgba(245, 158, 11, 0.95);
+            }
+            54%, 100% {
+                box-shadow: 0 0 4px rgba(245, 158, 11, 0.15);
+                border-color: rgba(245, 158, 11, 0.3);
+            }
+        }
+
+        .unread-effect-ripple {
+            animation: unreadRipple 1.8s cubic-bezier(0, 0.2, 0.8, 1) infinite !important;
+        }
+
+        @keyframes unreadRipple {
+            0% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+                border-color: rgba(16, 185, 129, 0.85);
+            }
+            70% {
+                box-shadow: 0 0 0 12px rgba(16, 185, 129, 0);
+                border-color: rgba(16, 185, 129, 0.35);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+                border-color: rgba(16, 185, 129, 0.35);
+            }
+        }
+
+        .unread-effect-bounce {
+            animation: unreadBounce 2.2s cubic-bezier(0.28, 0.84, 0.42, 1) infinite !important;
+        }
+
+        @keyframes unreadBounce {
+            0%, 100% {
+                transform: translateY(0);
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            }
+            18% {
+                transform: translateY(-6px);
+                box-shadow: 0 10px 18px rgba(99, 102, 241, 0.35);
+                border-color: rgba(99, 102, 241, 0.8);
+            }
+            30% {
+                transform: translateY(0);
+            }
+            42% {
+                transform: translateY(-2.5px);
+                box-shadow: 0 6px 12px rgba(99, 102, 241, 0.25);
+            }
+            54% {
+                transform: translateY(0);
+            }
+        }
+
+        .unread-effect-border_stream {
+            animation: unreadBorderStream 3.5s linear infinite !important;
+        }
+
+        @keyframes unreadBorderStream {
+            0% {
+                box-shadow: -6px -4px 14px rgba(236, 72, 153, 0.5), 6px 4px 14px rgba(59, 130, 246, 0.4);
+                border-color: rgba(236, 72, 153, 0.8);
+            }
+            25% {
+                box-shadow: 6px -4px 14px rgba(16, 185, 129, 0.5), -6px 4px 14px rgba(245, 158, 11, 0.4);
+                border-color: rgba(16, 185, 129, 0.8);
+            }
+            50% {
+                box-shadow: 6px 4px 14px rgba(59, 130, 246, 0.5), -6px -4px 14px rgba(236, 72, 153, 0.4);
+                border-color: rgba(59, 130, 246, 0.8);
+            }
+            75% {
+                box-shadow: -6px 4px 14px rgba(245, 158, 11, 0.5), 6px -4px 14px rgba(16, 185, 129, 0.4);
+                border-color: rgba(245, 158, 11, 0.8);
+            }
+            100% {
+                box-shadow: -6px -4px 14px rgba(236, 72, 153, 0.5), 6px 4px 14px rgba(59, 130, 246, 0.4);
+                border-color: rgba(236, 72, 153, 0.8);
+            }
+        }
+
+        /* 鼠标悬停标记已阅后的渐出过渡 */
+        .unread-marked-read {
+            animation: none !important;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+            border-color: var(--border) !important;
+            transform: none !important;
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
     </style>
 </head>
 
@@ -424,6 +592,43 @@
 
             <div class="button-group" style="margin-top: 10px;">
                 <button type="button" class="btn btn-secondary" onclick="testNotificationSound()" data-i18n="testSound">🔊 测试声音</button>
+            </div>
+        </div>
+
+        <!-- 新消息特效设置 -->
+        <div class="settings-section">
+            <div class="settings-section-title" data-i18n="unreadEffectSettings">新消息特效设置</div>
+
+            <div class="form-group" style="margin-top: 10px;">
+                <label for="unreadEffect" data-i18n="unreadEffect">未读视觉特效</label>
+                <div class="toggle-desc" data-i18n="unreadEffectDesc" style="margin-bottom: 8px;">新通知持续展示该特效，鼠标悬停（移动过去）后特效消失并标记已阅</div>
+                <select id="unreadEffect" onchange="onUnreadEffectChanged()" style="width: 100%; padding: 8px; border: 2px solid var(--input-border); border-radius: 8px; background: var(--bg-card); color: var(--text-primary); font-size: 13px;">
+                    <option value="aurora" data-i18n="effect_aurora">极光霓虹流光 (推荐)</option>
+                    <option value="pulse" data-i18n="effect_pulse">呼吸脉动光晕</option>
+                    <option value="beacon" data-i18n="effect_beacon">科技信标高亮</option>
+                    <option value="ripple" data-i18n="effect_ripple">水波微澜涟漪</option>
+                    <option value="bounce" data-i18n="effect_bounce">灵动律动弹跳</option>
+                    <option value="border_stream" data-i18n="effect_border_stream">跑马灯炫彩边框</option>
+                    <option value="none" data-i18n="effect_none">关闭特效 (无动画)</option>
+                </select>
+            </div>
+
+            <!-- 效果预览卡片 -->
+            <div style="margin-top: 14px;">
+                <div style="font-size: 12px; font-weight: 500; color: var(--text-secondary); margin-bottom: 6px;" data-i18n="previewEffect">即时预览 (移入鼠标体验已阅)</div>
+                <div id="unreadEffectPreviewCard" class="unread-preview-card unread-effect-aurora" onmouseenter="previewCardHovered(this)">
+                    <div class="unread-preview-priority-bar"></div>
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <span style="font-weight: 600; font-size: 13px; color: var(--text-primary);" data-i18n="unreadEffectSampleTitle">新通知特效演示</span>
+                            <span style="font-size: 11px; opacity: 0.6; color: var(--text-secondary);">刚刚</span>
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.4;" data-i18n="unreadEffectSampleContent">鼠标移动到该卡片上方，特效将优雅淡出消失表示已阅。</div>
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
+                    <button type="button" class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px; flex: initial;" onclick="resetPreviewEffect()">🔄 重新展示特效</button>
+                </div>
             </div>
         </div>
     </div>
@@ -750,6 +955,97 @@
             }
         }
 
+        // 加载未读特效设置
+        async function loadUnreadEffect() {
+            let effect = localStorage.getItem('gotify_unread_effect') || 'aurora';
+            if (typeof window.__TAURI_INTERNALS__ !== 'undefined') {
+                try {
+                    const { invoke } = window.__TAURI_INTERNALS__;
+                    const saved = await invoke('get_unread_effect');
+                    if (saved) {
+                        effect = saved;
+                    }
+                } catch (e) {
+                    console.warn('获取未读特效失败，使用默认配置:', e);
+                }
+            }
+            const selectEl = document.getElementById('unreadEffect');
+            if (selectEl) {
+                selectEl.value = effect;
+            }
+            localStorage.setItem('gotify_unread_effect', effect);
+            applyPreviewEffect(effect);
+        }
+
+        // 特效选择改变
+        async function onUnreadEffectChanged() {
+            const selectEl = document.getElementById('unreadEffect');
+            const effect = selectEl ? selectEl.value : 'aurora';
+            localStorage.setItem('gotify_unread_effect', effect);
+            applyPreviewEffect(effect);
+
+            if (typeof window.__TAURI_INTERNALS__ !== 'undefined') {
+                try {
+                    const { invoke } = window.__TAURI_INTERNALS__;
+                    await invoke('save_unread_effect', { effect });
+                    showStatus(t('settingsSaved'), 'success');
+                } catch (e) {
+                    console.error('保存未读特效失败:', e);
+                    showStatus(t('settingsSaveFailed'), 'error');
+                }
+            }
+        }
+
+        // 应用特效到预览卡片
+        function applyPreviewEffect(effect) {
+            const card = document.getElementById('unreadEffectPreviewCard');
+            if (!card) return;
+            // 清理旧特效类
+            const effectClasses = [
+                'unread-effect-aurora',
+                'unread-effect-pulse',
+                'unread-effect-beacon',
+                'unread-effect-ripple',
+                'unread-effect-bounce',
+                'unread-effect-border_stream',
+                'unread-marked-read'
+            ];
+            card.classList.remove(...effectClasses);
+            if (effect && effect !== 'none') {
+                card.classList.add(`unread-effect-${effect}`);
+            }
+        }
+
+        // 鼠标移入预览卡片
+        function previewCardHovered(el) {
+            if (!el) return;
+            const selectEl = document.getElementById('unreadEffect');
+            const currentEffect = selectEl ? selectEl.value : 'aurora';
+            if (currentEffect === 'none') return;
+            if (el.classList.contains('unread-marked-read')) return;
+
+            // 触发平滑已阅淡出
+            el.classList.add('unread-marked-read');
+            setTimeout(() => {
+                const effectClasses = [
+                    'unread-effect-aurora',
+                    'unread-effect-pulse',
+                    'unread-effect-beacon',
+                    'unread-effect-ripple',
+                    'unread-effect-bounce',
+                    'unread-effect-border_stream'
+                ];
+                el.classList.remove(...effectClasses);
+            }, 350);
+        }
+
+        // 重置预览卡片特效
+        function resetPreviewEffect() {
+            const selectEl = document.getElementById('unreadEffect');
+            const effect = selectEl ? selectEl.value : 'aurora';
+            applyPreviewEffect(effect);
+        }
+
         // 页面加载完成后初始化
         document.addEventListener('DOMContentLoaded', () => {
             updateTranslations();
@@ -757,6 +1053,7 @@
             loadAutoLaunch();
             loadShowInDock();
             loadSoundSettings();
+            loadUnreadEffect();
             listenConnectionStatus();
         });
 

@@ -65,6 +65,21 @@ const translations = {
         'highOnly': '仅高优先级 (优先级 >= 8)',
         'testSound': '测试声音',
 
+        // 新消息未读特效
+        'unreadEffectSettings': '新消息特效设置',
+        'unreadEffect': '未读视觉特效',
+        'unreadEffectDesc': '新通知持续展示该特效，鼠标悬停（移动过去）后特效消失并标记已阅',
+        'previewEffect': '即时预览',
+        'effect_aurora': '极光霓虹流光 (推荐)',
+        'effect_pulse': '呼吸脉动光晕',
+        'effect_beacon': '科技信标高亮',
+        'effect_ripple': '水波微澜涟漪',
+        'effect_bounce': '灵动律动弹跳',
+        'effect_border_stream': '跑马灯炫彩边框',
+        'effect_none': '关闭特效 (无动画)',
+        'unreadEffectSampleTitle': '新通知特效演示',
+        'unreadEffectSampleContent': '鼠标移动到该卡片上方，特效将优雅淡出消失表示已阅。',
+
         // 连接状态
         'connecting': '正在连接...',
         'reconnecting': '断开重连中...',
@@ -147,6 +162,21 @@ const translations = {
         'mediumHighPriorities': 'Medium & High (>= 5)',
         'highOnly': 'High Only (>= 8)',
         'testSound': 'Test Sound',
+
+        // Unread Effect Settings
+        'unreadEffectSettings': 'Unread Effect Settings',
+        'unreadEffect': 'New Message Animation',
+        'unreadEffectDesc': 'New notifications keep this effect until you hover over them to mark as read',
+        'previewEffect': 'Live Preview',
+        'effect_aurora': 'Aurora Neon Flow (Recommended)',
+        'effect_pulse': 'Breathing Pulse Glow',
+        'effect_beacon': 'Tech Beacon Spotlight',
+        'effect_ripple': 'Gentle Ripple Wave',
+        'effect_bounce': 'Dynamic Subtle Bounce',
+        'effect_border_stream': 'Rainbow Marquee Border',
+        'effect_none': 'Disabled (No Animation)',
+        'unreadEffectSampleTitle': 'Unread Effect Preview',
+        'unreadEffectSampleContent': 'Hover cursor over this card to watch the effect smoothly fade away as marked read.',
 
         // Connection status
         'connecting': 'Connecting...',

@@ -215,6 +215,20 @@ mod macos_window {
             // 262144: canJoinAllApplications (Stage Manager 识别为桌面组件，不作为独立舞台应用管理或遮挡卡片)
             msg_usize(win, behavior_sel, 1 | 16 | 64 | 256 | 262144);
 
+            // 隐藏红黄绿按钮（macOS 交通灯按钮），保持 FullSizeContentView 完整不被破坏
+            let button_sel = sel_registerName(b"standardWindowButton:\0".as_ptr() as _);
+            let hidden_sel = sel_registerName(b"setHidden:\0".as_ptr() as _);
+            let f_btn: unsafe extern "C" fn(*mut c_void, *mut c_void, usize) -> *mut c_void =
+                std::mem::transmute(objc_msgSend as *const ());
+            let f_hide: unsafe extern "C" fn(*mut c_void, *mut c_void, usize) =
+                std::mem::transmute(objc_msgSend as *const ());
+            for btn_type in 0..=2 {
+                let btn = f_btn(win, button_sel, btn_type);
+                if !btn.is_null() {
+                    f_hide(btn, hidden_sel, 1); // hidden = YES
+                }
+            }
+
             let inval_sel = sel_registerName(b"invalidateShadow\0".as_ptr() as _);
             let f_inval: unsafe extern "C" fn(*mut c_void, *mut c_void) =
                 std::mem::transmute(objc_msgSend as *const ());
@@ -227,6 +241,20 @@ mod macos_window {
             f_order(win, order_back_sel, std::ptr::null_mut());
         } else {
             FLOATING_WIN_PTR.store(0, Ordering::Relaxed);
+
+            // 恢复红黄绿按钮显示（始终保持在窗口内部左上角，绝不脱离或漂出窗口）
+            let button_sel = sel_registerName(b"standardWindowButton:\0".as_ptr() as _);
+            let hidden_sel = sel_registerName(b"setHidden:\0".as_ptr() as _);
+            let f_btn: unsafe extern "C" fn(*mut c_void, *mut c_void, usize) -> *mut c_void =
+                std::mem::transmute(objc_msgSend as *const ());
+            let f_hide: unsafe extern "C" fn(*mut c_void, *mut c_void, usize) =
+                std::mem::transmute(objc_msgSend as *const ());
+            for btn_type in 0..=2 {
+                let btn = f_btn(win, button_sel, btn_type);
+                if !btn.is_null() {
+                    f_hide(btn, hidden_sel, 0); // hidden = NO
+                }
+            }
 
             // 恢复系统窗口正常阴影
             let shadow_sel = sel_registerName(b"setHasShadow:\0".as_ptr() as _);
@@ -272,6 +300,67 @@ mod macos_window {
             dispatch_async_f(&_dispatch_main_q, ctx as *mut c_void, do_set_desktop_pin);
         }
     }
+
+    #[repr(C)]
+    #[derive(Copy, Clone, Debug)]
+    pub struct NSPoint {
+        pub x: f64,
+        pub y: f64,
+    }
+
+    /// 获取鼠标相对于该 NSWindow 的客户区坐标（左上角为 0,0）。
+    /// 无论窗口是否为 Key/Active Window，该方法都能瞬时返回鼠标相对坐标。
+    pub fn get_window_client_mouse_location(ns_window: *mut c_void) -> Option<(f64, f64)> {
+        if ns_window.is_null() { return None; }
+        unsafe {
+            let mouse_sel = sel_registerName(b"mouseLocationOutsideOfEventStream\0".as_ptr() as _);
+            let frame_sel = sel_registerName(b"frame\0".as_ptr() as _);
+            let f_mouse: unsafe extern "C" fn(*mut c_void, *mut c_void) -> NSPoint =
+                std::mem::transmute(objc_msgSend as *const ());
+            let f_frame: unsafe extern "C" fn(*mut c_void, *mut c_void) -> CGRect =
+                std::mem::transmute(objc_msgSend as *const ());
+
+            let pt = f_mouse(ns_window, mouse_sel);
+            let frame = f_frame(ns_window, frame_sel);
+
+            let width = frame.size.width;
+            let height = frame.size.height;
+
+            let client_x = pt.x;
+            let client_y = height - pt.y;
+
+            if client_x >= 0.0 && client_x <= width && client_y >= 0.0 && client_y <= height {
+                Some((client_x, client_y))
+            } else {
+                None
+            }
+        }
+    }
+
+    unsafe extern "C" fn do_enable_mouse_tracking(ctx: *mut c_void) {
+        let win = ctx;
+        if win.is_null() { return; }
+        let accepts_sel = sel_registerName(b"setAcceptsMouseMovedEvents:\0".as_ptr() as _);
+        let f: unsafe extern "C" fn(*mut c_void, *mut c_void, usize) =
+            std::mem::transmute(objc_msgSend as *const ());
+        f(win, accepts_sel, 1);
+    }
+
+    pub fn schedule_enable_mouse_tracking(ns_window: *mut c_void) {
+        if ns_window.is_null() { return; }
+        unsafe {
+            dispatch_async_f(&_dispatch_main_q, ns_window, do_enable_mouse_tracking);
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+mod macos_window {
+    use std::ffi::c_void;
+    pub fn get_window_client_mouse_location(_ns_window: *mut c_void) -> Option<(f64, f64)> {
+        None
+    }
+    pub fn schedule_enable_mouse_tracking(_ns_window: *mut c_void) {}
 }
 
 
@@ -333,6 +422,27 @@ fn save_sound_config(sound_enabled: bool, min_priority: u32) -> Result<(), Strin
     let config_path = format!("{}/.gotify_sound_config.json", config_dir);
     std::fs::write(&config_path, serde_json::to_string_pretty(&config).unwrap())
         .map_err(|e| format!("保存声音设置失败: {}", e))
+}
+
+#[tauri::command]
+fn get_unread_effect() -> String {
+    let config_dir = get_config_dir();
+    let config_path = format!("{}/.gotify_unread_effect.json", config_dir);
+    if let Ok(content) = std::fs::read_to_string(&config_path) {
+        if let Ok(effect) = serde_json::from_str::<String>(&content) {
+            return effect;
+        }
+    }
+    "aurora".to_string()
+}
+
+#[tauri::command]
+fn save_unread_effect(app: tauri::AppHandle, effect: String) -> Result<(), String> {
+    let config_dir = get_config_dir();
+    let config_path = format!("{}/.gotify_unread_effect.json", config_dir);
+    let _ = std::fs::write(&config_path, serde_json::to_string(&effect).unwrap());
+    let _ = app.emit("tauri://unread-effect-changed", serde_json::json!({ "effect": effect }));
+    Ok(())
 }
 
 
@@ -1170,6 +1280,46 @@ pub fn run() {
             let app_handle = app.handle().clone();
             let main_window = app.get_webview_window("main").unwrap();
 
+            #[cfg(target_os = "macos")]
+            {
+                if let Ok(ns_win_ptr) = main_window.ns_window() {
+                    macos_window::schedule_enable_mouse_tracking(ns_win_ptr as *mut std::ffi::c_void);
+                }
+            }
+
+            // 启动后台无焦鼠标移动监测任务：在应用未被激活/无焦点的情况下，鼠标滑过卡片依然能够瞬时检测并标记已阅
+            let hover_app = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let mut last_client_pos: Option<(i32, i32)> = None;
+                loop {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                    if let Some(win) = hover_app.get_webview_window("main") {
+                        if let Ok(is_visible) = win.is_visible() {
+                            if !is_visible {
+                                continue;
+                            }
+                        } else {
+                            continue;
+                        }
+
+                        #[cfg(target_os = "macos")]
+                        {
+                            if let Ok(ns_win_ptr) = win.ns_window() {
+                                if let Some((cx, cy)) = macos_window::get_window_client_mouse_location(ns_win_ptr as *mut std::ffi::c_void) {
+                                    let rounded = (cx.round() as i32, cy.round() as i32);
+                                    if last_client_pos != Some(rounded) {
+                                        last_client_pos = Some(rounded);
+                                        let _ = win.emit("native-mouse-hover", serde_json::json!({ "x": cx, "y": cy }));
+                                    }
+                                } else if last_client_pos.is_some() {
+                                    last_client_pos = None;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
             // Windows: 根据用户设置决定是否在任务栏显示图标
             #[cfg(target_os = "windows")]
             {
@@ -1530,6 +1680,8 @@ pub fn run() {
             set_widget_opacity,
             set_widget_mode,
             toggle_widget_mode,
+            get_unread_effect,
+            save_unread_effect,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -1825,6 +1977,7 @@ async fn set_widget_mode(app: tauri::AppHandle, enable: bool) -> Result<bool, St
         config.is_widget_mode = true;
         let _ = save_widget_config_to_file(&config);
 
+        #[cfg(not(target_os = "macos"))]
         let _ = window.set_decorations(false);
         let _ = window.set_always_on_top(false);
 
@@ -1887,6 +2040,7 @@ async fn set_widget_mode(app: tauri::AppHandle, enable: bool) -> Result<bool, St
             }
         }
 
+        #[cfg(not(target_os = "macos"))]
         let _ = window.set_decorations(true);
 
         let target_w = if config.normal_width >= 320 && config.normal_width <= 1000 {

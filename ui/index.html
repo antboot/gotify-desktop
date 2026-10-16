@@ -959,6 +959,64 @@
             box-shadow: none !important;
         }
 
+        /* 标题栏连接状态与未读角标 */
+        .status-indicator {
+            width: 7.5px;
+            height: 7.5px;
+            border-radius: 50%;
+            background: #10b981;
+            box-shadow: 0 0 6px rgba(16, 185, 129, 0.7);
+            display: inline-block;
+            margin-right: 6px;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+            vertical-align: middle;
+        }
+
+        .status-indicator.connecting {
+            background: #f59e0b;
+            box-shadow: 0 0 6px rgba(245, 158, 11, 0.7);
+        }
+
+        .status-indicator.offline {
+            background: #ef4444;
+            box-shadow: 0 0 6px rgba(239, 68, 68, 0.7);
+        }
+
+        .title-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 17px;
+            height: 17px;
+            padding: 0 5px;
+            border-radius: 9px;
+            background: rgba(99, 102, 241, 0.25);
+            color: #818cf8;
+            border: 1px solid rgba(99, 102, 241, 0.4);
+            font-size: 10.5px;
+            font-weight: 700;
+            margin-left: 6px;
+            line-height: 1;
+            vertical-align: middle;
+        }
+
+        .title-badge.hidden {
+            display: none !important;
+        }
+
+        /* 模式彻底隔离：在普通模式下彻底隐藏小组件视图，杜绝重叠与布局错位 */
+        #desktopWidgetView,
+        .desktop-widget-card {
+            display: none !important;
+        }
+
+        /* 仅在小组件模式下才显示小组件视图 */
+        html.widget-mode #desktopWidgetView,
+        html.widget-mode .desktop-widget-card {
+            display: flex !important;
+        }
+
         html.widget-mode #appTitlebar,
         html.widget-mode #connectionBanner,
         html.widget-mode #notifications,
@@ -983,7 +1041,6 @@
                 inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.28),
                 inset 0 -1px 1px 0 rgba(0, 0, 0, 0.25),
                 inset 0 0 0 0.5px rgba(255, 255, 255, 0.08) !important;
-            display: flex !important;
             flex-direction: column !important;
             overflow: hidden !important;
             box-sizing: border-box !important;
@@ -1494,6 +1551,159 @@
             background: rgba(239, 68, 68, 0.2);
             color: #ef4444;
         }
+
+        /* ============================================================
+           6 种新消息未读视觉特效 (鼠标移过已阅后自动消除)
+           ============================================================ */
+        /* 1. 极光霓虹流光 (推荐) */
+        .unread-effect-aurora {
+            animation: unreadAurora 3s ease-in-out infinite alternate !important;
+            border-color: rgba(99, 102, 241, 0.6) !important;
+        }
+
+        @keyframes unreadAurora {
+            0% {
+                box-shadow: 0 0 14px rgba(99, 102, 241, 0.5), 0 0 26px rgba(236, 72, 153, 0.25);
+                border-color: rgba(99, 102, 241, 0.75);
+            }
+            50% {
+                box-shadow: 0 0 18px rgba(16, 185, 129, 0.5), 0 0 30px rgba(59, 130, 246, 0.3);
+                border-color: rgba(16, 185, 129, 0.8);
+            }
+            100% {
+                box-shadow: 0 0 16px rgba(245, 158, 11, 0.45), 0 0 28px rgba(168, 85, 247, 0.28);
+                border-color: rgba(245, 158, 11, 0.75);
+            }
+        }
+
+        /* 2. 呼吸脉动光晕 */
+        .unread-effect-pulse {
+            animation: unreadPulse 2s ease-in-out infinite !important;
+        }
+
+        @keyframes unreadPulse {
+            0%, 100% {
+                box-shadow: 0 0 4px rgba(59, 130, 246, 0.15);
+                border-color: rgba(59, 130, 246, 0.3);
+                transform: scale(1);
+            }
+            50% {
+                box-shadow: 0 0 18px 3px rgba(59, 130, 246, 0.6);
+                border-color: rgba(59, 130, 246, 0.9);
+                transform: scale(1.012);
+            }
+        }
+
+        /* 3. 科技信标高亮双闪 */
+        .unread-effect-beacon {
+            animation: unreadBeacon 2.4s ease-in-out infinite !important;
+        }
+
+        @keyframes unreadBeacon {
+            0%, 100% {
+                box-shadow: 0 0 4px rgba(245, 158, 11, 0.15);
+                border-color: rgba(245, 158, 11, 0.3);
+            }
+            14% {
+                box-shadow: 0 0 22px 3px rgba(245, 158, 11, 0.8);
+                border-color: rgba(245, 158, 11, 0.95);
+            }
+            26% {
+                box-shadow: 0 0 6px rgba(245, 158, 11, 0.25);
+            }
+            40% {
+                box-shadow: 0 0 22px 3px rgba(245, 158, 11, 0.8);
+                border-color: rgba(245, 158, 11, 0.95);
+            }
+            54%, 100% {
+                box-shadow: 0 0 4px rgba(245, 158, 11, 0.15);
+                border-color: rgba(245, 158, 11, 0.3);
+            }
+        }
+
+        /* 4. 水波微澜涟漪 */
+        .unread-effect-ripple {
+            animation: unreadRipple 1.8s cubic-bezier(0, 0.2, 0.8, 1) infinite !important;
+        }
+
+        @keyframes unreadRipple {
+            0% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+                border-color: rgba(16, 185, 129, 0.85);
+            }
+            70% {
+                box-shadow: 0 0 0 12px rgba(16, 185, 129, 0);
+                border-color: rgba(16, 185, 129, 0.35);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+                border-color: rgba(16, 185, 129, 0.35);
+            }
+        }
+
+        /* 5. 灵动律动弹跳 */
+        .unread-effect-bounce {
+            animation: unreadBounce 2.2s cubic-bezier(0.28, 0.84, 0.42, 1) infinite !important;
+        }
+
+        @keyframes unreadBounce {
+            0%, 100% {
+                transform: translateY(0);
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            }
+            18% {
+                transform: translateY(-6px);
+                box-shadow: 0 10px 18px rgba(99, 102, 241, 0.35);
+                border-color: rgba(99, 102, 241, 0.8);
+            }
+            30% {
+                transform: translateY(0);
+            }
+            42% {
+                transform: translateY(-2.5px);
+                box-shadow: 0 6px 12px rgba(99, 102, 241, 0.25);
+            }
+            54% {
+                transform: translateY(0);
+            }
+        }
+
+        /* 6. 跑马灯炫彩边框 */
+        .unread-effect-border_stream {
+            animation: unreadBorderStream 3.5s linear infinite !important;
+        }
+
+        @keyframes unreadBorderStream {
+            0% {
+                box-shadow: -6px -4px 14px rgba(236, 72, 153, 0.5), 6px 4px 14px rgba(59, 130, 246, 0.4);
+                border-color: rgba(236, 72, 153, 0.8);
+            }
+            25% {
+                box-shadow: 6px -4px 14px rgba(16, 185, 129, 0.5), -6px 4px 14px rgba(245, 158, 11, 0.4);
+                border-color: rgba(16, 185, 129, 0.8);
+            }
+            50% {
+                box-shadow: 6px 4px 14px rgba(59, 130, 246, 0.5), -6px -4px 14px rgba(236, 72, 153, 0.4);
+                border-color: rgba(59, 130, 246, 0.8);
+            }
+            75% {
+                box-shadow: -6px 4px 14px rgba(245, 158, 11, 0.5), 6px -4px 14px rgba(16, 185, 129, 0.4);
+                border-color: rgba(245, 158, 11, 0.8);
+            }
+            100% {
+                box-shadow: -6px -4px 14px rgba(236, 72, 153, 0.5), 6px 4px 14px rgba(59, 130, 246, 0.4);
+                border-color: rgba(236, 72, 153, 0.8);
+            }
+        }
+
+        /* 鼠标移入标记已阅后的平滑消退过度类 */
+        .unread-marked-read {
+            animation: none !important;
+            box-shadow: none !important;
+            border-color: rgba(128, 128, 128, 0.15) !important;
+            transform: none !important;
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
     </style>
 </head>
 
@@ -1526,8 +1736,10 @@
             <div class="titlebar-drag-region" data-tauri-drag-region onmousedown="onTitlebarMouseDown(event)">
                 <div class="titlebar-traffic-lights-spacer" data-tauri-drag-region></div>
                 <div class="titlebar-title" data-tauri-drag-region>
+                    <span id="appStatusDot" class="status-indicator online" title="已连接"></span>
                     <span class="title-bell">🔔</span>
                     <span class="title-text">Gotify 通知</span>
+                    <span id="appBadge" class="title-badge hidden">0</span>
                 </div>
             </div>
             <div class="titlebar-actions" style="-webkit-app-region: no-drag;">
@@ -1755,6 +1967,7 @@
                 document.body.classList.remove('widget-mode');
                 const widgetView = document.getElementById('desktopWidgetView');
                 if (widgetView) widgetView.style.display = 'none';
+                renderNotifications();
             }
         }
 
@@ -1918,6 +2131,68 @@
             }
         }
 
+        // ============================================================
+        // 未读通知特效状态管理与已阅消除
+        // ============================================================
+        let currentUnreadEffect = localStorage.getItem('gotify_unread_effect') || 'aurora';
+
+        async function initUnreadEffect() {
+            try {
+                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                    const effect = await window.__TAURI_INTERNALS__.invoke('get_unread_effect');
+                    if (effect) {
+                        currentUnreadEffect = effect;
+                        localStorage.setItem('gotify_unread_effect', effect);
+                    }
+                }
+            } catch (e) {
+                console.warn('获取未读特效失败:', e);
+            }
+
+            // 跨窗口/跨页面 storage 同步
+            window.addEventListener('storage', (e) => {
+                if (e.key === 'gotify_unread_effect' && e.newValue) {
+                    setUnreadEffect(e.newValue);
+                }
+            });
+        }
+
+        function setUnreadEffect(effect) {
+            currentUnreadEffect = effect || 'aurora';
+            localStorage.setItem('gotify_unread_effect', currentUnreadEffect);
+            renderNotifications();
+        }
+
+        // 鼠标移入卡片（hover / mouseenter）标记已阅，特效丝滑消退
+        function markNotificationRead(id, el) {
+            const notif = notifications.find(n => n.id === id);
+            if (!notif || !notif.unread) return;
+
+            notif.unread = false;
+
+            const targetCards = [];
+            if (el) targetCards.push(el);
+            const widgetCard = document.querySelector(`.widget-item[data-id="${id}"]`);
+            const normalCard = document.querySelector(`.notification-card[data-id="${id}"]`);
+            if (widgetCard && !targetCards.includes(widgetCard)) targetCards.push(widgetCard);
+            if (normalCard && !targetCards.includes(normalCard)) targetCards.push(normalCard);
+
+            targetCards.forEach(card => {
+                card.classList.add('unread-marked-read');
+                setTimeout(() => {
+                    const effectClasses = [
+                        'unread-effect-aurora',
+                        'unread-effect-pulse',
+                        'unread-effect-beacon',
+                        'unread-effect-ripple',
+                        'unread-effect-bounce',
+                        'unread-effect-border_stream'
+                    ];
+                    card.classList.remove(...effectClasses);
+                }, 350);
+            });
+        }
+
         function renderWidgetNotifications() {
             const listEl = document.getElementById('widgetMessageList');
             const badgeEl = document.getElementById('widgetBadge');
@@ -1959,9 +2234,12 @@
                 const priorityClass = getPriorityClass(notif.priority);
                 const pinnedClass = notif.pinned ? 'pinned' : '';
                 const expandedClass = notif.expanded ? 'expanded' : '';
+                const unreadEffectClass = (notif.unread && currentUnreadEffect && currentUnreadEffect !== 'none')
+                    ? `unread-effect-${currentUnreadEffect}`
+                    : '';
 
                 return `
-                    <div class="widget-item priority-${priorityClass} ${pinnedClass} ${expandedClass}" onclick="toggleExpand(${notif.id})" title="${notif.expanded ? '点击收起详情' : '点击展开查看详情'}">
+                    <div class="widget-item priority-${priorityClass} ${pinnedClass} ${expandedClass} ${unreadEffectClass}" data-id="${notif.id}" onclick="toggleExpand(${notif.id})" onmouseenter="markNotificationRead(${notif.id}, this)" title="${notif.expanded ? '点击收起详情' : '点击展开查看详情'}">
                         <div class="widget-item-header">
                             <span class="widget-item-title">${escapeHtml(notif.title || 'Gotify 通知')}</span>
                             <div class="widget-item-meta">
@@ -2337,6 +2615,35 @@
                     });
                     console.log('✅ widget-mode 状态监听器注册成功！');
 
+                    // 注册 unread-effect 未读特效监听器
+                    console.log('正在注册 unread-effect 状态监听器...');
+                    const unlistenUnreadEffect = await listen('tauri://unread-effect-changed', (event) => {
+                        console.log('✨ 收到未读特效变更事件:', event.payload);
+                        if (event && event.payload && typeof event.payload.effect === 'string') {
+                            setUnreadEffect(event.payload.effect);
+                        }
+                    });
+                    console.log('✅ unread-effect 监听器注册成功！');
+
+                    // 注册 native-mouse-hover 全局无焦鼠标悬停监听器 (鼠标移过即感知已阅，无需点击激活窗口)
+                    const unlistenHover = await listen('native-mouse-hover', (event) => {
+                        if (!event || !event.payload) return;
+                        const { x, y } = event.payload;
+                        if (!notifications.some(n => n.unread)) return;
+
+                        const el = document.elementFromPoint(x, y);
+                        if (!el) return;
+                        const card = el.closest('.widget-item, .notification-card');
+                        if (card && card.dataset.id) {
+                            const id = parseInt(card.dataset.id, 10);
+                            markNotificationRead(id, card);
+                        }
+                    });
+                    console.log('✅ native-mouse-hover 监听器注册成功！');
+
+                    // 初始化未读特效设置
+                    await initUnreadEffect();
+
                     // 检查初始 WebSocket 状态
                     try {
                         const { invoke } = window.__TAURI_INTERNALS__;
@@ -2457,6 +2764,7 @@
 
         function renderNotifications() {
             const clearAllBtn = document.getElementById('clearAllBtn');
+            const appBadge = document.getElementById('appBadge');
 
             if (notifications.length === 0) {
                 notificationsContainer.innerHTML = `
@@ -2466,9 +2774,16 @@
                     </div>
                 `;
                 if (clearAllBtn) clearAllBtn.classList.remove('visible');
+                if (appBadge) appBadge.classList.add('hidden');
                 document.documentElement.classList.remove('has-clear-all');
                 renderWidgetNotifications();
                 return;
+            }
+
+            // 更新标题栏角标
+            if (appBadge) {
+                appBadge.textContent = notifications.length;
+                appBadge.classList.remove('hidden');
             }
 
             // 显示清除按钮
@@ -2487,10 +2802,13 @@
                 const isNew = index === 0 && !notif.pinned && notifications.length > 1;
                 const pinnedClass = notif.pinned ? 'pinned' : '';
                 const expandedClass = notif.expanded ? 'expanded' : '';
+                const unreadEffectClass = (notif.unread && currentUnreadEffect && currentUnreadEffect !== 'none')
+                    ? `unread-effect-${currentUnreadEffect}`
+                    : '';
 
                 return `
                     <div class="notification-card-wrapper" id="notif-wrapper-${notif.id}">
-                        <div class="notification-card priority-${priorityClass} ${pinnedClass} ${expandedClass}" data-id="${notif.id}" onclick="toggleExpand(${notif.id})">
+                        <div class="notification-card priority-${priorityClass} ${pinnedClass} ${expandedClass} ${unreadEffectClass}" data-id="${notif.id}" onclick="toggleExpand(${notif.id})" onmouseenter="markNotificationRead(${notif.id}, this)">
                             ${isNew ? `<div class="new-badge">${t('new')}</div>` : ''}
                             <div class="notification-header">
                                 <div class="notification-title">${escapeHtml(notif.title)}</div>
@@ -2632,6 +2950,20 @@
                     widgetDot.classList.add('offline');
                 }
             }
+
+            const appDot = document.getElementById('appStatusDot');
+            if (appDot) {
+                if (status === 'connected') {
+                    appDot.className = 'status-indicator online';
+                    appDot.title = 'Gotify 已连接';
+                } else if (status === 'connecting' || status === 'reconnecting') {
+                    appDot.className = 'status-indicator connecting';
+                    appDot.title = '连接中...';
+                } else {
+                    appDot.className = 'status-indicator offline';
+                    appDot.title = '未连接';
+                }
+            }
         }
 
         function playChimeSound() {
@@ -2671,6 +3003,7 @@
             // 添加 pinned 属性，默认为 false
             notif.pinned = false;
             notif.expanded = false;
+            notif.unread = true; // 收到新消息时标记未读以触发特效
             notifications.unshift(notif);
 
             // 只保留最近50条
