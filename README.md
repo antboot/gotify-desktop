@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/huahn3/gotify-desktop/releases"><img src="https://img.shields.io/github/v/release/huahn3/gotify-desktop?style=flat-square&color=blue" alt="Latest Release" /></a>
+  <a href="https://github.com/antboot/gotify-desktop/releases"><img src="https://img.shields.io/github/v/release/antboot/gotify-desktop?style=flat-square&color=blue" alt="Latest Release" /></a>
   <a href="https://tauri.app"><img src="https://img.shields.io/badge/Tauri-v2-24C8DB?style=flat-square&logo=tauri&logoColor=white" alt="Tauri 2" /></a>
   <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/Rust-2021-orange?style=flat-square&logo=rust&logoColor=white" alt="Rust" /></a>
-  <a href="https://github.com/huahn3/gotify-desktop/blob/main/LICENSE"><img src="https://img.shields.io/github/license/huahn3/gotify-desktop?style=flat-square&color=green" alt="License" /></a>
+  <a href="https://github.com/antboot/gotify-desktop/blob/main/LICENSE"><img src="https://img.shields.io/github/license/antboot/gotify-desktop?style=flat-square&color=green" alt="License" /></a>
   <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square" alt="Cross Platform" />
 </p>
 
@@ -57,7 +57,7 @@
 ## 🚀 下载与安装 (Installation)
 
 ### 方式一：直接下载安装包（推荐）
-前往 [Releases 页面](https://github.com/huahn3/gotify-desktop/releases/latest) 下载适用于你系统的预编译安装包：
+前往 [Releases 页面](https://github.com/antboot/gotify-desktop/releases/latest) 下载适用于你系统的预编译安装包：
 - **macOS (Apple Silicon & Intel)**：下载 `.dmg` 文件，拖入 `Applications` 即可使用。
 - **Windows**：下载 `.msi` 或绿色版安装包。
 
@@ -67,7 +67,7 @@
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/huahn3/gotify-desktop.git
+git clone https://github.com/antboot/gotify-desktop.git
 cd gotify-desktop
 
 # 2. 安装 Tauri CLI (若尚未安装)
