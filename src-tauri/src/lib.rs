@@ -762,7 +762,6 @@ mod windows_window {
     }
 }
 
-static FOCUS_EPOCH: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 struct GotifyMessage {
@@ -1583,48 +1582,51 @@ pub fn run() {
                 }
             }
 
-            // 启动后台无焦鼠标移动监测任务：在应用未被激活/无焦点的情况下，鼠标滑过卡片依然能够瞬时检测并标记已阅
+            // 启动后台无焦鼠标移动监测任务：
+            // macOS 对失焦/底层窗口不可靠地派发 mouseleave，WebKit 的 mouseleave 会丢失，
+            // 导致"鼠标已离开但悬停状态卡住、磨砂不消退"。这里用 50ms 原生轮询可靠地
+            // 同时驱动主小组件与应用盒：进入/移动 → inside=true，离开 → inside=false。
+            // 主窗口同时依赖该事件实现无焦滑过标记已阅。
             let hover_app = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                let mut last_client_pos: Option<(i32, i32)> = None;
+                let mut last_client_pos: [Option<(i32, i32)>; 2] = [None, None];
                 loop {
                     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-                    if let Some(win) = hover_app.get_webview_window("main") {
-                        if let Ok(is_visible) = win.is_visible() {
-                            if !is_visible {
-                                continue;
-                            }
-                        } else {
+                    for (i, label) in ["main", "app_shelf"].iter().enumerate() {
+                        let Some(win) = hover_app.get_webview_window(label) else { continue };
+                        if !win.is_visible().unwrap_or(false) {
+                            last_client_pos[i] = None;
                             continue;
                         }
 
                         #[cfg(target_os = "macos")]
-                        {
-                            if let Ok(ns_win_ptr) = win.ns_window() {
-                                if let Some((cx, cy)) = macos_window::get_window_client_mouse_location(ns_win_ptr as *mut std::ffi::c_void) {
-                                    let rounded = (cx.round() as i32, cy.round() as i32);
-                                    if last_client_pos != Some(rounded) {
-                                        last_client_pos = Some(rounded);
-                                        let _ = win.emit("native-mouse-hover", serde_json::json!({ "x": cx, "y": cy }));
-                                    }
-                                } else if last_client_pos.is_some() {
-                                    last_client_pos = None;
-                                }
-                            }
-                        }
+                        let loc: Option<(f64, f64)> = win
+                            .ns_window()
+                            .ok()
+                            .and_then(|p| macos_window::get_window_client_mouse_location(p as *mut std::ffi::c_void));
 
                         #[cfg(target_os = "windows")]
-                        {
-                            if let Ok(hwnd) = win.hwnd() {
-                                let scale_factor = win.scale_factor().unwrap_or(1.0);
-                                if let Some((cx, cy)) = windows_window::get_window_client_mouse_location(hwnd.0 as isize, scale_factor) {
-                                    let rounded = (cx.round() as i32, cy.round() as i32);
-                                    if last_client_pos != Some(rounded) {
-                                        last_client_pos = Some(rounded);
-                                        let _ = win.emit("native-mouse-hover", serde_json::json!({ "x": cx, "y": cy }));
-                                    }
-                                } else if last_client_pos.is_some() {
-                                    last_client_pos = None;
+                        let loc: Option<(f64, f64)> = win
+                            .hwnd()
+                            .ok()
+                            .and_then(|h| windows_window::get_window_client_mouse_location(h.0 as isize, win.scale_factor().unwrap_or(1.0)));
+
+                        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+                        let loc: Option<(f64, f64)> = None;
+
+                        match loc {
+                            Some((cx, cy)) => {
+                                let rounded = (cx.round() as i32, cy.round() as i32);
+                                if last_client_pos[i] != Some(rounded) {
+                                    last_client_pos[i] = Some(rounded);
+                                    // emit_to + JS 侧显式 target：仅发送给当前窗口，避免两个小组件互相联动
+                                    let _ = win.emit_to(*label, "native-mouse-hover", serde_json::json!({ "x": cx, "y": cy, "inside": true }));
+                                }
+                            }
+                            None => {
+                                if last_client_pos[i].is_some() {
+                                    last_client_pos[i] = None;
+                                    let _ = win.emit_to(*label, "native-mouse-hover", serde_json::json!({ "x": -1.0, "y": -1.0, "inside": false }));
                                 }
                             }
                         }
@@ -1906,7 +1908,10 @@ pub fn run() {
                 }
             }
             tauri::WindowEvent::Focused(focused) => {
-                let current_epoch = FOCUS_EPOCH.fetch_add(1, Ordering::SeqCst) + 1;
+                // 将真实的窗口焦点变化仅通知给对应窗口自身：
+                // WKWebView 的 DOM focus/blur 事件在 App 激活时会在所有 webview 里乱触发，
+                // 造成两个小组件互相联动变磨砂；这里用原生逐窗口焦点事件替代。
+                let _ = window.emit_to(window.label(), "widget-focus", serde_json::json!({ "focused": focused }));
                 if *focused {
                     // 当桌面小组件被点击获得焦点时，临时提升层级到前台 (Level 3)，让用户能够看清并无阻碍操作
                     #[cfg(target_os = "macos")]
@@ -1922,8 +1927,7 @@ pub fn run() {
                         }
                     }
                 } else {
-                    // 小组件失去焦点时，延迟 6 秒才沉降回底层桌面，确保用户点击后有充足的 5~6 秒时间查看并交互
-                    let win_clone = window.clone();
+                    // 小组件失去焦点时，若非悬浮置顶，则自动沉降回底层桌面，不遮挡正在操作的应用程序
                     let always_on_top = if window.label() == "main" {
                         get_window_always_on_top(window.app_handle().clone())
                     } else if window.label() == "app_shelf" {
@@ -1933,32 +1937,19 @@ pub fn run() {
                     };
 
                     if !always_on_top {
-                        tauri::async_runtime::spawn(async move {
-                            tokio::time::sleep(tokio::time::Duration::from_millis(6000)).await;
-                            // 如果 6 秒内有任何新的焦点或激活事件发生，立即取消本次沉降
-                            if FOCUS_EPOCH.load(Ordering::SeqCst) != current_epoch {
-                                return;
+                        #[cfg(target_os = "macos")]
+                        {
+                            if let Ok(ns_win) = window.ns_window() {
+                                macos_window::schedule_sink_to_desktop(ns_win as *mut std::ffi::c_void);
                             }
-                            // 如果 6 秒后窗口依然具有焦点，不沉降
-                            if let Ok(is_focused) = win_clone.is_focused() {
-                                if is_focused {
-                                    return;
-                                }
-                            }
-                            #[cfg(target_os = "macos")]
-                            {
-                                if let Ok(ns_win) = win_clone.ns_window() {
-                                    macos_window::schedule_sink_to_desktop(ns_win as *mut std::ffi::c_void);
-                                }
-                            }
+                        }
 
-                            #[cfg(target_os = "windows")]
-                            {
-                                if let Ok(hwnd) = win_clone.hwnd() {
-                                    windows_window::set_desktop_pin(hwnd.0 as isize, true);
-                                }
+                        #[cfg(target_os = "windows")]
+                        {
+                            if let Ok(hwnd) = window.hwnd() {
+                                windows_window::set_desktop_pin(hwnd.0 as isize, true);
                             }
-                        });
+                        }
                     }
                 }
             }
@@ -2093,6 +2084,7 @@ pub fn run() {
             set_shelf_mode_opacity,
             activate_widget_window,
             set_app_shelf_hide_header,
+            set_widget_glass,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -2374,7 +2366,6 @@ fn toggle_window_always_on_top(app: tauri::AppHandle) -> Result<bool, String> {
 
 #[tauri::command]
 fn start_dragging_window(window: tauri::WebviewWindow) -> Result<(), String> {
-    FOCUS_EPOCH.fetch_add(1, Ordering::SeqCst);
     #[cfg(target_os = "macos")]
     {
         if let Ok(ns_win) = window.ns_window() {
@@ -2402,9 +2393,22 @@ fn start_dragging_window(window: tauri::WebviewWindow) -> Result<(), String> {
     res
 }
 
+/// 前端交互状态机驱动的原生毛玻璃开关（macOS 常驻磨砂，失焦不变透明）
+#[tauri::command]
+fn set_widget_glass(window: tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        set_native_widget_glass(&window, enabled);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (window, enabled);
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn activate_widget_window(window: tauri::WebviewWindow) -> Result<(), String> {
-    FOCUS_EPOCH.fetch_add(1, Ordering::SeqCst);
     #[cfg(target_os = "macos")]
     {
         if let Ok(ns_win) = window.ns_window() {
@@ -2626,6 +2630,28 @@ fn get_app_icon_data_url(path: &str) -> String {
     }
 
     String::new()
+}
+
+/// 桌面小组件专用原生毛玻璃开关：
+/// macOS 的窗口毛玻璃（NSVisualEffectView）默认跟随窗口激活状态 —— 一旦窗口失焦
+/// （沉底桌面 / 用户点了别处），系统就会撤销模糊，小组件瞬间由「磨砂」退化为
+/// 「纯透明底色」。这正是「点击后 1~2 秒又变透明」的根因。
+/// 因此这里不让系统自动管理，而是由前端交互状态机显式开关：
+/// - 点击 / 悬停 / 拖动时：启用 state = Active 的原生磨砂（不依赖窗口是否获得焦点）；
+/// - 空闲恢复透明时：移除毛玻璃，仅保留极淡的玻璃底色，回归“通透”的桌面形态。
+#[cfg(target_os = "macos")]
+fn set_native_widget_glass(window: &tauri::WebviewWindow, enabled: bool) {
+    use tauri::window::{Effect, EffectState, EffectsBuilder};
+    let effects = if enabled {
+        EffectsBuilder::new()
+            .effect(Effect::HudWindow)
+            .state(EffectState::Active)
+            .radius(16.0)
+            .build()
+    } else {
+        EffectsBuilder::new().build()
+    };
+    let _ = window.set_effects(effects);
 }
 
 pub fn create_app_shelf_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {

@@ -16,7 +16,6 @@
             --accent-hover: #4f46e5;
             --danger: #ef4444;
             --widget-opacity: 0.70;
-            --widget-active-opacity: 0.70;
         }
 
         [data-theme="light"] {
@@ -27,8 +26,6 @@
             --accent: #4f46e5;
             --accent-hover: #4338ca;
             --danger: #ef4444;
-            --widget-opacity: 0.70;
-            --widget-active-opacity: 0.80;
         }
 
         * {
@@ -81,9 +78,10 @@
             will-change: transform, backdrop-filter;
             -webkit-backface-visibility: hidden;
             backface-visibility: hidden;
+            /* 磨砂模糊由原生 NSVisualEffectView（set_widget_glass）提供：
+               WebKit 的 backdrop-filter 在窗口失焦时会被系统撤销渲染，
+               而系统级毛玻璃可由 state=Active 显式控制，交互期间绝不消失 */
             background: rgba(22, 28, 40, var(--widget-opacity, 0.45)) !important;
-            backdrop-filter: blur(32px) !important;
-            -webkit-backdrop-filter: blur(32px) !important;
             border: 1px solid rgba(255, 255, 255, 0.16) !important;
             box-shadow:
                 inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.28),
@@ -117,8 +115,6 @@
 
         [data-theme="light"] .desktop-widget-card {
             background: rgba(245, 247, 252, var(--widget-opacity, 0.45)) !important;
-            backdrop-filter: blur(32px) !important;
-            -webkit-backdrop-filter: blur(32px) !important;
             border: 1px solid rgba(255, 255, 255, 0.65) !important;
             box-shadow:
                 inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.85),
@@ -1011,38 +1007,35 @@
         let widgetDragStartY = 0;
         const WIDGET_DRAG_THRESHOLD = 4;
 
-        // 点击小组件任意区域时，立即将窗口提升至前台并持续保持磨砂半透明状态（保底至少 6 秒）
+        // 点击小组件任意区域时，立即将窗口提升至前台并持续保持磨砂半透明状态（至少 3 秒）
         let activeHoldTimer = null;
-        let activeUntilTimestamp = 0;
         let isMouseInsideCard = false;
+        let glassEnabled = false;
 
         const setWidgetActiveState = (active) => {
-            const card = document.getElementById('widgetCard');
+            const card = document.getElementById('desktopWidgetView');
             if (!card) return;
             if (active) {
                 card.classList.add('is-active', 'is-focused');
             } else {
                 card.classList.remove('is-active', 'is-focused');
             }
+            // 原生毛玻璃跟随交互状态显式开关（详见 shelf.html 内说明）
+            const nextGlass = !!active;
+            if (nextGlass !== glassEnabled) {
+                glassEnabled = nextGlass;
+                try {
+                    if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                        window.__TAURI_INTERNALS__.invoke('set_widget_glass', { enabled: nextGlass }).catch(() => {});
+                    }
+                } catch (_) {}
+            }
         };
 
-        const keepActive = (duration = 6000) => {
+        const keepActive = (duration = 3000) => {
             setWidgetActiveState(true);
-            const target = Date.now() + duration;
-            if (target > activeUntilTimestamp) {
-                activeUntilTimestamp = target;
-            }
             clearTimeout(activeHoldTimer);
             activeHoldTimer = setTimeout(() => {
-                const remaining = activeUntilTimestamp - Date.now();
-                if (remaining > 50) {
-                    activeHoldTimer = setTimeout(() => {
-                        if (!isMouseInsideCard) {
-                            setWidgetActiveState(false);
-                        }
-                    }, remaining);
-                    return;
-                }
                 if (!isMouseInsideCard) {
                     setWidgetActiveState(false);
                 }
@@ -1050,7 +1043,7 @@
         };
 
         const activateWidgetWindow = () => {
-            keepActive(6000);
+            keepActive(3000);
             try {
                 if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
                     window.__TAURI_INTERNALS__.invoke('activate_widget_window').catch(() => {});
@@ -1060,46 +1053,37 @@
 
         window.addEventListener('mousedown', activateWidgetWindow, true);
         window.addEventListener('pointerdown', activateWidgetWindow, true);
-        document.addEventListener('mousedown', activateWidgetWindow, true);
-        document.addEventListener('pointerdown', activateWidgetWindow, true);
 
         // 鼠标移入小组件时保持磨砂
-        const onMouseEnter = () => {
+        window.addEventListener('mouseenter', () => {
             isMouseInsideCard = true;
-            keepActive(6000);
-        };
-        const onMouseMove = () => {
+            keepActive(3000);
+        });
+        window.addEventListener('mousemove', () => {
             if (!isMouseInsideCard) {
                 isMouseInsideCard = true;
             }
-        };
-        const onMouseLeave = () => {
+        });
+        window.addEventListener('mouseleave', () => {
             isMouseInsideCard = false;
-            // 鼠标移出后，再保持 6 秒才平滑恢复透明
-            keepActive(6000);
+            // 鼠标移出后，再保持 3 秒才平滑恢复透明
+            keepActive(3000);
+        });
+
+        // 窗口真实焦点变化由后端逐窗口精确派发（DOM focus/blur 在 App 激活时会串扰）：
+        // 获得焦点 → 保持磨砂；失去焦点 → 延后 3 秒再平滑恢复平时的透明
+        const onWindowFocusChanged = (focused) => {
+            if (focused) {
+                keepActive(3000);
+            } else {
+                clearTimeout(activeHoldTimer);
+                activeHoldTimer = setTimeout(() => {
+                    if (!isMouseInsideCard) {
+                        setWidgetActiveState(false);
+                    }
+                }, 3000);
+            }
         };
-
-        document.addEventListener('mouseenter', onMouseEnter);
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseleave', onMouseLeave);
-        window.addEventListener('mouseenter', onMouseEnter);
-        window.addEventListener('mousemove', onMouseMove);
-        window.addEventListener('mouseleave', onMouseLeave);
-
-        // 窗口失焦时，延后剩余时间（保底 6 秒）才恢复平时的透明
-        window.addEventListener('blur', () => {
-            clearTimeout(activeHoldTimer);
-            const remaining = Math.max(1000, activeUntilTimestamp - Date.now());
-            activeHoldTimer = setTimeout(() => {
-                if (!isMouseInsideCard) {
-                    setWidgetActiveState(false);
-                }
-            }, remaining);
-        });
-
-        window.addEventListener('focus', () => {
-            keepActive(6000);
-        });
 
         function onWidgetMouseDown(event) {
             if (!event || event.button !== 0) return;
@@ -1627,10 +1611,16 @@
                             }
                         });
 
-                        // 7. native-mouse-hover (全局无焦鼠标滑过标记已阅)
+                        // 7. native-mouse-hover (全局无焦鼠标滑过标记已阅 + 同步悬停状态)
+                        // 注意：必须显式指定 target 为本窗口，否则 Tauri 对默认 Any 目标的监听器不做过滤，事件会串到应用盒
                         await listen('native-mouse-hover', (event) => {
                             if (!event || !event.payload) return;
-                            const { x, y } = event.payload;
+                            const { x, y, inside } = event.payload;
+                            if (typeof inside === 'boolean' && inside !== isMouseInsideCard) {
+                                isMouseInsideCard = inside;
+                                keepActive(3000);
+                            }
+                            if (inside === false) return;
                             if (!notifications.some(n => n.unread)) return;
                             const el = document.elementFromPoint(x, y);
                             if (!el) return;
@@ -1639,7 +1629,13 @@
                                 const id = parseInt(card.dataset.id, 10);
                                 markNotificationRead(id, card);
                             }
-                        });
+                        }, { target: { kind: 'WebviewWindow', label: 'main' } });
+
+                        // 8. widget-focus (后端逐窗口派发的真实窗口焦点变化)
+                        await listen('widget-focus', (event) => {
+                            const focused = !!(event && event.payload && event.payload.focused);
+                            onWindowFocusChanged(focused);
+                        }, { target: { kind: 'WebviewWindow', label: 'main' } });
                     }
 
                     // 加载初始未读特效与弹跳配置
