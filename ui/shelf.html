@@ -503,8 +503,8 @@
     <div class="container">
         <div class="desktop-widget-card" id="shelfCard" oncontextmenu="onCardContextMenu(event)" onmousedown="onCardMouseDown(event)">
             <!-- 头部 -->
-            <div class="widget-header" id="shelfHeader" data-tauri-drag-region onmousedown="onHeaderMouseDown(event)">
-                <div class="widget-status" data-tauri-drag-region>
+            <div class="widget-header" id="shelfHeader" onmousedown="onHeaderMouseDown(event)">
+                <div class="widget-status">
                     <span>🗂️</span>
                     <span id="shelfTitle">应用盒</span>
                     <span id="shelfBadge" class="shelf-badge">0</span>
@@ -609,13 +609,15 @@
             window.__TAURI_INTERNALS__.invoke : async () => {};
 
         // 点击小组件任意区域时，立即将窗口提升至前台（避免被其他普通窗口遮挡）
-        window.addEventListener('mousedown', () => {
+        const activateWidget = () => {
             try {
                 if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
                     window.__TAURI_INTERNALS__.invoke('activate_widget_window').catch(() => {});
                 }
             } catch (_) {}
-        }, true);
+        };
+        window.addEventListener('mousedown', activateWidget, true);
+        window.addEventListener('pointerdown', activateWidget, true);
 
         // 初始化
         document.addEventListener('DOMContentLoaded', async () => {
@@ -787,7 +789,12 @@
             });
         }
 
-        // 拖拽窗口移动：在整个卡片空白区域均可拖动（即使顶部栏隐藏也能随意拖拽）
+        // 拖拽窗口移动：移动超过阈值才判定为拖动，避免普通点击被拖动截断
+        let isCardMouseDown = false;
+        let cardDragStartX = 0;
+        let cardDragStartY = 0;
+        const DRAG_MOVE_THRESHOLD = 4;
+
         function onCardMouseDown(event) {
             if (event.button !== 0) return;
             const target = event.target;
@@ -795,13 +802,15 @@
             if (target.closest('.app-item') ||
                 target.closest('.icon-btn') ||
                 target.closest('.widget-opacity-popover') ||
-                target.closest('.context-menu')) {
+                target.closest('.context-menu') ||
+                target.closest('.shelf-empty')) {
                 return;
             }
 
-            if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
-                window.__TAURI_INTERNALS__.invoke('start_dragging_window').catch(() => {});
-            }
+            activateWidget();
+            isCardMouseDown = true;
+            cardDragStartX = event.screenX;
+            cardDragStartY = event.screenY;
         }
 
         function onHeaderMouseDown(event) {
@@ -809,10 +818,31 @@
             const target = event.target;
             if (target.closest('.icon-btn') || target.closest('.widget-opacity-popover')) return;
 
-            if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
-                window.__TAURI_INTERNALS__.invoke('start_dragging_window').catch(() => {});
-            }
+            activateWidget();
+            isCardMouseDown = true;
+            cardDragStartX = event.screenX;
+            cardDragStartY = event.screenY;
         }
+
+        window.addEventListener('mousemove', (event) => {
+            if (!isCardMouseDown) return;
+            if ((event.buttons & 1) !== 1) {
+                isCardMouseDown = false;
+                return;
+            }
+            const dx = Math.abs(event.screenX - cardDragStartX);
+            const dy = Math.abs(event.screenY - cardDragStartY);
+            if (dx >= DRAG_MOVE_THRESHOLD || dy >= DRAG_MOVE_THRESHOLD) {
+                isCardMouseDown = false;
+                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                    window.__TAURI_INTERNALS__.invoke('start_dragging_window').catch(() => {});
+                }
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            isCardMouseDown = false;
+        });
 
         // 隐藏/显示顶部栏切换
         function toggleHeaderBar(event) {

@@ -121,6 +121,53 @@ mod macos_window {
         true
     }
 
+    unsafe extern "C" fn yes_first_mouse_imp(_this: *mut c_void, _cmd: *mut c_void, _event: *mut c_void) -> bool {
+        true
+    }
+
+    unsafe fn setup_accepts_first_mouse(win: *mut c_void, cls: *mut c_void) {
+        let first_mouse_sel = sel_registerName(b"acceptsFirstMouse:\0".as_ptr() as _);
+        let bool_event_types = b"c@:@\0".as_ptr() as *const c_char;
+        let yes_fn: unsafe extern "C" fn() = std::mem::transmute(yes_first_mouse_imp as *const ());
+
+        if !cls.is_null() {
+            if !class_addMethod(cls, first_mouse_sel, yes_fn, bool_event_types) {
+                let m = class_getInstanceMethod(cls, first_mouse_sel);
+                if !m.is_null() { method_setImplementation(m, yes_fn); }
+            }
+        }
+
+        if !win.is_null() {
+            let cv_sel = sel_registerName(b"contentView\0".as_ptr() as _);
+            let f_cv: unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void =
+                std::mem::transmute(objc_msgSend as *const ());
+            let cv = f_cv(win, cv_sel);
+            if !cv.is_null() {
+                let cv_cls = object_getClass(cv);
+                if !class_addMethod(cv_cls, first_mouse_sel, yes_fn, bool_event_types) {
+                    let m = class_getInstanceMethod(cv_cls, first_mouse_sel);
+                    if !m.is_null() { method_setImplementation(m, yes_fn); }
+                }
+            }
+        }
+
+        let wk_content_cls = objc_getClass(b"WKContentView\0".as_ptr() as _);
+        if !wk_content_cls.is_null() {
+            if !class_addMethod(wk_content_cls, first_mouse_sel, yes_fn, bool_event_types) {
+                let m = class_getInstanceMethod(wk_content_cls, first_mouse_sel);
+                if !m.is_null() { method_setImplementation(m, yes_fn); }
+            }
+        }
+
+        let wk_web_cls = objc_getClass(b"WKWebView\0".as_ptr() as _);
+        if !wk_web_cls.is_null() {
+            if !class_addMethod(wk_web_cls, first_mouse_sel, yes_fn, bool_event_types) {
+                let m = class_getInstanceMethod(wk_web_cls, first_mouse_sel);
+                if !m.is_null() { method_setImplementation(m, yes_fn); }
+            }
+        }
+    }
+
     unsafe extern "C" fn do_set_floating(ctx: *mut c_void) {
         let boxed = Box::from_raw(ctx as *mut FloatCtx);
         let win = boxed.ns_window;
@@ -162,6 +209,9 @@ mod macos_window {
                 let m = class_getInstanceMethod(cls, main_sel);
                 if !m.is_null() { method_setImplementation(m, yes_fn); }
             }
+
+            // 允许接收初次鼠标点击，空白处点击也能直接响应并激活
+            setup_accepts_first_mouse(win, cls);
 
             let shadow_sel = sel_registerName(b"setHasShadow:\0".as_ptr() as _);
             msg_usize(win, shadow_sel, 0); // hasShadow: NO
@@ -268,6 +318,9 @@ mod macos_window {
                 let m = class_getInstanceMethod(cls, main_sel);
                 if !m.is_null() { method_setImplementation(m, yes_fn); }
             }
+
+            // 允许接收初次鼠标点击，空白处点击也能直接响应并激活
+            setup_accepts_first_mouse(win, cls);
 
             // 消除 macOS 窗口四角黑色直角系统阴影与背景
             let shadow_sel = sel_registerName(b"setHasShadow:\0".as_ptr() as _);
@@ -404,7 +457,15 @@ mod macos_window {
     pub fn schedule_elevate_to_front(ns_window: *mut c_void) {
         if ns_window.is_null() { return; }
         unsafe {
-            dispatch_async_f(&_dispatch_main_q, ns_window, do_elevate_to_front);
+            let ns_thread_cls = objc_getClass(b"NSThread\0".as_ptr() as _);
+            let is_main_sel = sel_registerName(b"isMainThread\0".as_ptr() as _);
+            let f_is_main: unsafe extern "C" fn(*mut c_void, *mut c_void) -> bool =
+                std::mem::transmute(objc_msgSend as *const ());
+            if !ns_thread_cls.is_null() && f_is_main(ns_thread_cls, is_main_sel) {
+                do_elevate_to_front(ns_window);
+            } else {
+                dispatch_async_f(&_dispatch_main_q, ns_window, do_elevate_to_front);
+            }
         }
     }
 
@@ -2297,7 +2358,31 @@ fn toggle_window_always_on_top(app: tauri::AppHandle) -> Result<bool, String> {
 
 #[tauri::command]
 fn start_dragging_window(window: tauri::WebviewWindow) -> Result<(), String> {
-    window.start_dragging().map_err(|e| format!("拖动窗口失败: {}", e))
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(ns_win) = window.ns_window() {
+            macos_window::schedule_elevate_to_front(ns_win as *mut std::ffi::c_void);
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(hwnd) = window.hwnd() {
+            windows_window::bring_to_front(hwnd.0 as isize);
+        }
+    }
+    let _ = window.set_focus();
+
+    let res = window.start_dragging().map_err(|e| format!("拖动窗口失败: {}", e));
+
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(ns_win) = window.ns_window() {
+            macos_window::schedule_elevate_to_front(ns_win as *mut std::ffi::c_void);
+        }
+    }
+    let _ = window.set_focus();
+
+    res
 }
 
 #[tauri::command]

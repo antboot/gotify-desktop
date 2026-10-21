@@ -800,13 +800,13 @@
 
     <div class="container">
         <!-- 桌面小组件卡片 (Desktop Widget Card) -->
-        <div id="desktopWidgetView" class="desktop-widget-card" data-tauri-drag-region
+        <div id="desktopWidgetView" class="desktop-widget-card"
             onmousedown="onWidgetMouseDown(event)">
-            <div class="widget-header" data-tauri-drag-region onmousedown="onWidgetMouseDown(event)">
-                <div class="widget-status" data-tauri-drag-region onmousedown="onWidgetMouseDown(event)">
-                    <span id="widgetStatusDot" class="widget-indicator" data-tauri-drag-region></span>
-                    <span class="widget-title" data-tauri-drag-region>Gotify</span>
-                    <span id="widgetBadge" class="widget-badge hidden" data-tauri-drag-region>0</span>
+            <div class="widget-header" onmousedown="onWidgetMouseDown(event)">
+                <div class="widget-status" onmousedown="onWidgetMouseDown(event)">
+                    <span id="widgetStatusDot" class="widget-indicator"></span>
+                    <span class="widget-title">Gotify</span>
+                    <span id="widgetBadge" class="widget-badge hidden">0</span>
                 </div>
                 <div class="widget-actions">
                     <!-- 玻璃透明度调节按钮 -->
@@ -980,7 +980,22 @@
             }
         }
 
-        // 桌面小组件窗口拖拽处理
+        // 桌面小组件窗口拖拽与点击激活处理
+        let isWidgetMouseDown = false;
+        let widgetDragStartX = 0;
+        let widgetDragStartY = 0;
+        const WIDGET_DRAG_THRESHOLD = 4;
+
+        const activateWidgetWindow = () => {
+            try {
+                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                    window.__TAURI_INTERNALS__.invoke('activate_widget_window').catch(() => {});
+                }
+            } catch (_) {}
+        };
+        window.addEventListener('mousedown', activateWidgetWindow, true);
+        window.addEventListener('pointerdown', activateWidgetWindow, true);
+
         function onWidgetMouseDown(event) {
             if (!event || event.button !== 0) return;
             // 点击空白处时若菜单打开，立即关闭右键菜单
@@ -1000,24 +1015,36 @@
             ) {
                 return;
             }
-            if (typeof event.stopPropagation === 'function') event.stopPropagation();
-            try {
-                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
-                    window.__TAURI_INTERNALS__.invoke('start_dragging_window');
-                }
-            } catch (e) {
-                console.warn('拖动小组件失败:', e);
-            }
+
+            activateWidgetWindow();
+            isWidgetMouseDown = true;
+            widgetDragStartX = event.screenX;
+            widgetDragStartY = event.screenY;
         }
 
-        // 点击小组件任意区域时，立即将窗口提升至前台（避免被其他普通窗口遮挡）
-        window.addEventListener('mousedown', () => {
-            try {
-                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
-                    window.__TAURI_INTERNALS__.invoke('activate_widget_window').catch(() => {});
+        window.addEventListener('mousemove', (event) => {
+            if (!isWidgetMouseDown) return;
+            if ((event.buttons & 1) !== 1) {
+                isWidgetMouseDown = false;
+                return;
+            }
+            const dx = Math.abs(event.screenX - widgetDragStartX);
+            const dy = Math.abs(event.screenY - widgetDragStartY);
+            if (dx >= WIDGET_DRAG_THRESHOLD || dy >= WIDGET_DRAG_THRESHOLD) {
+                isWidgetMouseDown = false;
+                try {
+                    if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                        window.__TAURI_INTERNALS__.invoke('start_dragging_window').catch(() => {});
+                    }
+                } catch (e) {
+                    console.warn('拖动小组件失败:', e);
                 }
-            } catch (_) {}
-        }, true);
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            isWidgetMouseDown = false;
+        });
 
         // 透明度管理
         function setWidgetOpacity(opacity, persist = true, animate = false) {
