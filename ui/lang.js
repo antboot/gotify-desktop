@@ -16,13 +16,10 @@ const translations = {
         'clearAll': '清除所有（保留置顶）',
         'pin': '置顶',
         'unpin': '取消置顶',
-        'pinWindow': '窗口置顶 (悬浮在其他界面之上)',
-        'unpinWindow': '取消置顶 (当前置顶)',
-        'windowPinned': '已开启窗口置顶',
-        'windowUnpinned': '已关闭窗口置顶',
-        'desktopWidget': '桌面小组件',
-        'enterDesktopWidget': '钉在桌面 (小组件模式)',
-        'exitDesktopWidget': '还原完整窗口',
+        'pinWindow': '悬浮置顶 (前台)',
+        'unpinWindow': '常驻桌面 (底层)',
+        'windowPinned': '已开启悬浮置顶',
+        'windowUnpinned': '已切换常驻桌面',
         'adjustOpacity': '调节玻璃透明度',
         'delete': '删除',
         'new': 'NEW',
@@ -46,11 +43,11 @@ const translations = {
 
         // 应用设置
         'appSettings': '应用设置',
-        'showInDock': '在 Dock 中显示',
-        'showInDockDesc': '在 Dock 栏显示应用图标',
-        'showInDockEnabled': '已在 Dock 中显示',
-        'showInDockDisabled': '已从 Dock 中隐藏',
-        'showInDockFailed': '设置 Dock 显示失败',
+        'showInDock': '在 Dock 栏中显示图标',
+        'showInDockDesc': '默认不出现在 Dock 栏（仅常驻菜单栏后台）；打开后才在 Dock 栏显示',
+        'showInDockEnabled': '已在 Dock 栏中显示图标',
+        'showInDockDisabled': '已从 Dock 栏中隐藏（仅常驻菜单栏后台）',
+        'showInDockFailed': '设置 Dock 栏显示失败',
         'autoLaunch': '开机自启动',
         'autoLaunchDesc': '登录 Mac 时自动启动 Gotify',
 
@@ -115,13 +112,10 @@ const translations = {
         'clearAll': 'Clear All (keep pinned)',
         'pin': 'Pin',
         'unpin': 'Unpin',
-        'pinWindow': 'Pin Window (Always on Top)',
-        'unpinWindow': 'Unpin Window (Normal Level)',
-        'windowPinned': 'Window pinned on top',
-        'windowUnpinned': 'Window unpinned',
-        'desktopWidget': 'Desktop Widget',
-        'enterDesktopWidget': 'Pin to Desktop (Widget Mode)',
-        'exitDesktopWidget': 'Restore Full Window',
+        'pinWindow': 'Always on Top (Foreground)',
+        'unpinWindow': 'Pin to Desktop (Background)',
+        'windowPinned': 'Window set to always on top',
+        'windowUnpinned': 'Window set to desktop level',
         'adjustOpacity': 'Adjust Glass Opacity',
         'delete': 'Delete',
         'new': 'NEW',
@@ -146,10 +140,10 @@ const translations = {
 
         // Application settings
         'appSettings': 'Application Settings',
-        'showInDock': 'Show in Dock',
-        'showInDockDesc': 'Display app icon in the Dock',
+        'showInDock': 'Show Icon in Dock',
+        'showInDockDesc': 'Hidden by default (stays in menu bar like background services); turn on to show in Dock',
         'showInDockEnabled': 'Now showing in Dock',
-        'showInDockDisabled': 'Now hidden from Dock',
+        'showInDockDisabled': 'Now hidden from Dock (menu bar only)',
         'showInDockFailed': 'Failed to toggle Dock visibility',
 
         // Sound settings
@@ -201,23 +195,23 @@ const translations = {
 };
 
 // 平台自适应文案调整
-(function() {
+(function () {
     const isWindows = typeof navigator !== 'undefined' && (
         /windows|win32/i.test(navigator.userAgent) || (navigator.platform && navigator.platform.indexOf('Win') !== -1)
     );
     if (isWindows) {
         if (translations['zh-CN']) {
             translations['zh-CN']['autoLaunchDesc'] = '登录 Windows 时自动启动 Gotify';
-            translations['zh-CN']['showInDock'] = '在任务栏中显示';
-            translations['zh-CN']['showInDockDesc'] = '在系统任务栏显示应用图标（关闭则仅在托盘常驻）';
-            translations['zh-CN']['showInDockEnabled'] = '已在任务栏中显示';
-            translations['zh-CN']['showInDockDisabled'] = '已从任务栏中隐藏（仅在托盘常驻）';
+            translations['zh-CN']['showInDock'] = '在任务栏中显示图标';
+            translations['zh-CN']['showInDockDesc'] = '默认不出现在任务栏（仅常驻右下角托盘后台）；打开后才在任务栏显示';
+            translations['zh-CN']['showInDockEnabled'] = '已在任务栏中显示图标';
+            translations['zh-CN']['showInDockDisabled'] = '已从任务栏中隐藏（仅常驻托盘后台）';
             translations['zh-CN']['showInDockFailed'] = '设置任务栏显示失败';
         }
         if (translations['en']) {
             translations['en']['autoLaunchDesc'] = 'Auto-start Gotify when you log in to Windows';
-            translations['en']['showInDock'] = 'Show in Taskbar';
-            translations['en']['showInDockDesc'] = 'Display app icon in the Taskbar (stay in tray if off)';
+            translations['en']['showInDock'] = 'Show Icon in Taskbar';
+            translations['en']['showInDockDesc'] = 'Hidden by default (stays in system tray like background services); turn on to show in Taskbar';
             translations['en']['showInDockEnabled'] = 'Now showing in Taskbar';
             translations['en']['showInDockDisabled'] = 'Now hidden from Taskbar (tray only)';
             translations['en']['showInDockFailed'] = 'Failed to toggle Taskbar visibility';

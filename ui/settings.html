@@ -879,13 +879,20 @@
             }
         }
 
-        // 监听连接状态事件
+        // 监听连接状态事件与系统托盘同步事件
         function listenConnectionStatus() {
             if (typeof window.__TAURI_INTERNALS__ === 'undefined') return;
             const { listen } = window.__TAURI_INTERNALS__;
             if (listen) {
                 listen('websocket-status', (event) => {
                     updateConnectionStatus(event.payload === 'connected');
+                });
+                // 监听来自托盘菜单快捷开关的 Dock/任务栏状态变动
+                listen('tauri://show-in-dock-changed', (event) => {
+                    if (event && event.payload && typeof event.payload.enabled === 'boolean') {
+                        const el = document.getElementById('showInDock');
+                        if (el) el.checked = event.payload.enabled;
+                    }
                 });
             }
         }
