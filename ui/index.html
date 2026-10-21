@@ -410,7 +410,7 @@
             border-radius: 10px;
             padding: 8px 10px;
             cursor: pointer;
-            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
             position: relative;
             user-select: text;
             -webkit-user-select: text;
@@ -678,24 +678,62 @@
             }
         }
 
-        /* 5. 灵动律动弹跳 */
-        .unread-effect-bounce {
-            animation: unreadBounce 2s ease-in-out infinite !important;
+        /* 独立未读物理律动弹跳动效系统 */
+        :root {
+            --bounce-amp: -6px;
+            --bounce-amp-sub: -2.5px;
+            --bounce-amp-micro: -1px;
         }
 
-        @keyframes unreadBounce {
+        .unread-bounce-active {
+            animation: unreadSpringBounce 2.2s cubic-bezier(0.28, 0.84, 0.42, 1) infinite !important;
+        }
+
+        .unread-bounce-active.unread-effect-aurora {
+            animation: unreadAurora 3s ease-in-out infinite, unreadSpringBounce 2.2s cubic-bezier(0.28, 0.84, 0.42, 1) infinite !important;
+        }
+
+        .unread-bounce-active.unread-effect-pulse {
+            animation: unreadPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite, unreadSpringBounce 2.2s cubic-bezier(0.28, 0.84, 0.42, 1) infinite !important;
+        }
+
+        .unread-bounce-active.unread-effect-beacon {
+            animation: unreadBeacon 2.5s ease-in-out infinite, unreadSpringBounce 2.2s cubic-bezier(0.28, 0.84, 0.42, 1) infinite !important;
+        }
+
+        .unread-bounce-active.unread-effect-ripple {
+            animation: unreadRipple 2.2s cubic-bezier(0, 0.2, 0.8, 1) infinite, unreadSpringBounce 2.2s cubic-bezier(0.28, 0.84, 0.42, 1) infinite !important;
+        }
+
+        .unread-bounce-active.unread-effect-border_stream {
+            animation: unreadBorderStream 3.5s linear infinite, unreadSpringBounce 2.2s cubic-bezier(0.28, 0.84, 0.42, 1) infinite !important;
+        }
+
+        @keyframes unreadSpringBounce {
             0%, 100% {
                 transform: translateY(0);
-                border-color: rgba(245, 158, 11, 0.4);
             }
-            50% {
-                transform: translateY(-2px);
-                border-color: rgba(245, 158, 11, 0.9);
-                box-shadow: 0 4px 12px rgba(245, 158, 11, 0.35);
+            16% {
+                transform: translateY(var(--bounce-amp, -6px));
+            }
+            28% {
+                transform: translateY(0);
+            }
+            40% {
+                transform: translateY(var(--bounce-amp-sub, -2.5px));
+            }
+            52% {
+                transform: translateY(0);
+            }
+            62% {
+                transform: translateY(var(--bounce-amp-micro, -1px));
+            }
+            70% {
+                transform: translateY(0);
             }
         }
 
-        /* 6. 跑马灯炫彩边框 */
+        /* 5. 跑马灯炫彩边框 */
         .unread-effect-border_stream {
             animation: unreadBorderStream 3.5s linear infinite !important;
         }
@@ -728,8 +766,8 @@
             animation: none !important;
             box-shadow: none !important;
             border-color: rgba(128, 128, 128, 0.15) !important;
-            transform: none !important;
-            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            transform: translateY(0) !important;
+            transition: all 0.35s ease !important;
         }
     </style>
 </head>
@@ -853,6 +891,15 @@
         let desktopOpacity = 0.45;
         let currentWidgetOpacity = 0.45;
         let currentUnreadEffect = localStorage.getItem('gotify_unread_effect') || 'aurora';
+        let unreadBounceConfig = { enabled: true, amplitude: 6 };
+        try {
+            const storedBounce = localStorage.getItem('gotify_unread_bounce');
+            if (storedBounce) {
+                const parsed = JSON.parse(storedBounce);
+                if (parsed && typeof parsed.enabled === 'boolean') unreadBounceConfig.enabled = parsed.enabled;
+                if (parsed && typeof parsed.amplitude === 'number') unreadBounceConfig.amplitude = parsed.amplitude;
+            }
+        } catch (_) {}
 
         // 窗口置顶 vs 常驻桌面 UI 更新
         function updatePinButtonUI(pinned) {
@@ -1041,7 +1088,49 @@
             }
         }
 
-        // 未读通知特效
+        // 未读通知特效与独立律动弹跳
+        function applyBounceAmplitude(amp) {
+            const a = Math.max(2, Math.min(24, parseInt(amp, 10) || 6));
+            document.documentElement.style.setProperty('--bounce-amp', `-${a}px`);
+            document.documentElement.style.setProperty('--bounce-amp-sub', `-${Math.round(a * 0.42)}px`);
+            document.documentElement.style.setProperty('--bounce-amp-micro', `-${Math.max(1, Math.round(a * 0.16))}px`);
+        }
+
+        async function initUnreadBounce() {
+            try {
+                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                    const cfg = await window.__TAURI_INTERNALS__.invoke('get_unread_bounce');
+                    if (cfg) {
+                        if (typeof cfg.enabled === 'boolean') unreadBounceConfig.enabled = cfg.enabled;
+                        if (typeof cfg.amplitude === 'number') unreadBounceConfig.amplitude = cfg.amplitude;
+                        localStorage.setItem('gotify_unread_bounce', JSON.stringify(unreadBounceConfig));
+                    }
+                }
+            } catch (e) {
+                console.warn('获取未读弹跳失败:', e);
+            }
+
+            applyBounceAmplitude(unreadBounceConfig.amplitude);
+
+            window.addEventListener('storage', (e) => {
+                if (e.key === 'gotify_unread_bounce' && e.newValue) {
+                    try {
+                        const parsed = JSON.parse(e.newValue);
+                        setUnreadBounce(parsed.enabled, parsed.amplitude);
+                    } catch (_) {}
+                }
+            });
+        }
+
+        function setUnreadBounce(enabled, amplitude) {
+            unreadBounceConfig = {
+                enabled: typeof enabled === 'boolean' ? enabled : true,
+                amplitude: typeof amplitude === 'number' ? amplitude : 6
+            };
+            applyBounceAmplitude(unreadBounceConfig.amplitude);
+            renderWidgetNotifications();
+        }
+
         async function initUnreadEffect() {
             try {
                 if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
@@ -1083,8 +1172,8 @@
                         'unread-effect-pulse',
                         'unread-effect-beacon',
                         'unread-effect-ripple',
-                        'unread-effect-bounce',
-                        'unread-effect-border_stream'
+                        'unread-effect-border_stream',
+                        'unread-bounce-active'
                     ];
                     card.classList.remove(...effectClasses);
                 }, 350);
@@ -1135,9 +1224,12 @@
                 const unreadEffectClass = (notif.unread && currentUnreadEffect && currentUnreadEffect !== 'none')
                     ? `unread-effect-${currentUnreadEffect}`
                     : '';
+                const unreadBounceClass = (notif.unread && unreadBounceConfig.enabled)
+                    ? 'unread-bounce-active'
+                    : '';
 
                 return `
-                    <div class="widget-item priority-${priorityClass} ${pinnedClass} ${expandedClass} ${unreadEffectClass}" data-id="${notif.id}" onclick="toggleExpand(${notif.id})" onmouseenter="markNotificationRead(${notif.id}, this)" title="${notif.expanded ? '点击收起详情' : '点击展开查看详情'}">
+                    <div class="widget-item priority-${priorityClass} ${pinnedClass} ${expandedClass} ${unreadEffectClass} ${unreadBounceClass}" data-id="${notif.id}" onclick="toggleExpand(${notif.id})" onmouseenter="markNotificationRead(${notif.id}, this)" title="${notif.expanded ? '点击收起详情' : '点击展开查看详情'}">
                         <div class="widget-item-header">
                             <span class="widget-item-title">${escapeHtml(notif.title || 'Gotify 通知')}</span>
                             <div class="widget-item-meta">
@@ -1344,7 +1436,14 @@
                             }
                         });
 
-                        // 6. native-mouse-hover (全局无焦鼠标滑过标记已阅)
+                        // 6. unread-bounce-changed
+                        await listen('tauri://unread-bounce-changed', (event) => {
+                            if (event && event.payload) {
+                                setUnreadBounce(event.payload.enabled, event.payload.amplitude);
+                            }
+                        });
+
+                        // 7. native-mouse-hover (全局无焦鼠标滑过标记已阅)
                         await listen('native-mouse-hover', (event) => {
                             if (!event || !event.payload) return;
                             const { x, y } = event.payload;
@@ -1359,8 +1458,9 @@
                         });
                     }
 
-                    // 加载初始未读特效
+                    // 加载初始未读特效与弹跳配置
                     await initUnreadEffect();
+                    await initUnreadBounce();
 
                     // 加载初始小组件透明度配置与前台/底层透明度
                     try {

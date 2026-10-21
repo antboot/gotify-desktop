@@ -342,7 +342,7 @@
             border: 1.5px solid var(--border);
             border-radius: 10px;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: background 0.25s ease, border-color 0.25s ease, opacity 0.25s ease;
             user-select: none;
         }
 
@@ -354,7 +354,90 @@
             flex-shrink: 0;
         }
 
-        /* 6 种新消息未读特效定义 (与主窗口小组件同步) */
+        /* 预设幅度快捷按钮 */
+        .amp-preset {
+            flex: 1;
+            background: var(--section-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 5px 2px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.15s ease;
+            user-select: none;
+        }
+
+        .amp-preset:hover {
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--accent);
+            border-color: rgba(99, 102, 241, 0.35);
+        }
+
+        .amp-preset.active {
+            background: rgba(99, 102, 241, 0.2);
+            color: var(--accent);
+            border-color: var(--accent);
+            font-weight: 600;
+        }
+
+        /* 独立未读弹跳物理动效系统 */
+        :root {
+            --bounce-amp: -6px;
+            --bounce-amp-sub: -2.5px;
+            --bounce-amp-micro: -1px;
+        }
+
+        .unread-bounce-active {
+            animation: unreadSpringBounce 2.2s cubic-bezier(0.28, 0.84, 0.42, 1) infinite !important;
+        }
+
+        .unread-bounce-active.unread-effect-aurora {
+            animation: unreadAurora 3s ease-in-out infinite alternate, unreadSpringBounce 2.2s cubic-bezier(0.28, 0.84, 0.42, 1) infinite !important;
+        }
+
+        .unread-bounce-active.unread-effect-pulse {
+            animation: unreadPulse 2s ease-in-out infinite, unreadSpringBounce 2.2s cubic-bezier(0.28, 0.84, 0.42, 1) infinite !important;
+        }
+
+        .unread-bounce-active.unread-effect-beacon {
+            animation: unreadBeacon 2.4s ease-in-out infinite, unreadSpringBounce 2.2s cubic-bezier(0.28, 0.84, 0.42, 1) infinite !important;
+        }
+
+        .unread-bounce-active.unread-effect-ripple {
+            animation: unreadRipple 1.8s cubic-bezier(0, 0.2, 0.8, 1) infinite, unreadSpringBounce 2.2s cubic-bezier(0.28, 0.84, 0.42, 1) infinite !important;
+        }
+
+        .unread-bounce-active.unread-effect-border_stream {
+            animation: unreadBorderStream 3.5s linear infinite, unreadSpringBounce 2.2s cubic-bezier(0.28, 0.84, 0.42, 1) infinite !important;
+        }
+
+        @keyframes unreadSpringBounce {
+            0%, 100% {
+                transform: translateY(0);
+            }
+            16% {
+                transform: translateY(var(--bounce-amp, -6px));
+            }
+            28% {
+                transform: translateY(0);
+            }
+            40% {
+                transform: translateY(var(--bounce-amp-sub, -2.5px));
+            }
+            52% {
+                transform: translateY(0);
+            }
+            62% {
+                transform: translateY(var(--bounce-amp-micro, -1px));
+            }
+            70% {
+                transform: translateY(0);
+            }
+        }
+
+        /* 5 种新消息视觉特效定义 (与主窗口小组件同步) */
         .unread-effect-aurora {
             animation: unreadAurora 3s ease-in-out infinite alternate !important;
             border-color: rgba(99, 102, 241, 0.6) !important;
@@ -434,32 +517,6 @@
             100% {
                 box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
                 border-color: rgba(16, 185, 129, 0.35);
-            }
-        }
-
-        .unread-effect-bounce {
-            animation: unreadBounce 2.2s cubic-bezier(0.28, 0.84, 0.42, 1) infinite !important;
-        }
-
-        @keyframes unreadBounce {
-            0%, 100% {
-                transform: translateY(0);
-                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-            }
-            18% {
-                transform: translateY(-6px);
-                box-shadow: 0 10px 18px rgba(99, 102, 241, 0.35);
-                border-color: rgba(99, 102, 241, 0.8);
-            }
-            30% {
-                transform: translateY(0);
-            }
-            42% {
-                transform: translateY(-2.5px);
-                box-shadow: 0 6px 12px rgba(99, 102, 241, 0.25);
-            }
-            54% {
-                transform: translateY(0);
             }
         }
 
@@ -607,10 +664,38 @@
                     <option value="pulse" data-i18n="effect_pulse">呼吸脉动光晕</option>
                     <option value="beacon" data-i18n="effect_beacon">科技信标高亮</option>
                     <option value="ripple" data-i18n="effect_ripple">水波微澜涟漪</option>
-                    <option value="bounce" data-i18n="effect_bounce">灵动律动弹跳</option>
                     <option value="border_stream" data-i18n="effect_border_stream">跑马灯炫彩边框</option>
                     <option value="none" data-i18n="effect_none">关闭特效 (无动画)</option>
                 </select>
+            </div>
+
+            <!-- 独立弹跳动效设置 -->
+            <div class="toggle-group" style="margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--border);">
+                <div class="toggle-left">
+                    <div class="toggle-title" data-i18n="unreadBounceTitle">未读消息律动弹跳</div>
+                    <div class="toggle-desc" data-i18n="unreadBounceDesc">未读通知以物理弹性规律起伏弹跳，移入鼠标已阅后停止</div>
+                </div>
+                <div class="toggle-right">
+                    <label class="switch">
+                        <input type="checkbox" id="unreadBounceToggle" onchange="onUnreadBounceToggleChanged()">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div id="unreadBounceAmpGroup" class="form-group" style="margin-top: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <label for="unreadBounceAmpSlider" style="margin-bottom: 0; font-size: 13px;" data-i18n="unreadBounceAmp">弹跳幅度调节</label>
+                    <span id="unreadBounceAmpVal" style="font-size: 12px; font-weight: 600; color: var(--accent); background: rgba(99, 102, 241, 0.12); padding: 2px 8px; border-radius: 10px;">6px (适中)</span>
+                </div>
+                <input type="range" id="unreadBounceAmpSlider" min="2" max="16" step="1" value="6" oninput="onUnreadBounceAmpInput(this.value)" onchange="onUnreadBounceAmpChange(this.value)" style="width: 100%; accent-color: var(--accent); cursor: pointer;">
+                
+                <div style="display: flex; gap: 6px; margin-top: 8px;">
+                    <button type="button" class="amp-preset" data-val="3" onclick="setBounceAmpPreset(3)" data-i18n="bounceAmpGentle">微弱 (3px)</button>
+                    <button type="button" class="amp-preset active" data-val="6" onclick="setBounceAmpPreset(6)" data-i18n="bounceAmpMedium">适中 (6px)</button>
+                    <button type="button" class="amp-preset" data-val="10" onclick="setBounceAmpPreset(10)" data-i18n="bounceAmpProminent">明显 (10px)</button>
+                    <button type="button" class="amp-preset" data-val="14" onclick="setBounceAmpPreset(14)" data-i18n="bounceAmpStrong">强烈 (14px)</button>
+                </div>
             </div>
 
             <!-- 效果预览卡片 -->
@@ -962,6 +1047,24 @@
             }
         }
 
+        // 未读弹跳与视觉特效状态
+        let unreadBounceConfig = { enabled: true, amplitude: 6 };
+
+        function getBounceAmpText(val) {
+            const v = parseInt(val, 10);
+            if (v <= 4) return `${v}px (${t('bounceAmpGentle') || '微弱'})`;
+            if (v <= 7) return `${v}px (${t('bounceAmpMedium') || '适中'})`;
+            if (v <= 11) return `${v}px (${t('bounceAmpProminent') || '明显'})`;
+            return `${v}px (${t('bounceAmpStrong') || '强烈'})`;
+        }
+
+        function applyBounceAmpStyle(amp) {
+            const a = Math.max(2, Math.min(24, parseInt(amp, 10) || 6));
+            document.documentElement.style.setProperty('--bounce-amp', `-${a}px`);
+            document.documentElement.style.setProperty('--bounce-amp-sub', `-${Math.round(a * 0.42)}px`);
+            document.documentElement.style.setProperty('--bounce-amp-micro', `-${Math.max(1, Math.round(a * 0.16))}px`);
+        }
+
         // 加载未读特效设置
         async function loadUnreadEffect() {
             let effect = localStorage.getItem('gotify_unread_effect') || 'aurora';
@@ -982,6 +1085,130 @@
             }
             localStorage.setItem('gotify_unread_effect', effect);
             applyPreviewEffect(effect);
+        }
+
+        // 加载未读弹跳设置
+        async function loadUnreadBounce() {
+            let cfg = { enabled: true, amplitude: 6 };
+            try {
+                const stored = localStorage.getItem('gotify_unread_bounce');
+                if (stored) {
+                    const parsed = JSON.parse(stored);
+                    if (parsed && typeof parsed.enabled === 'boolean') cfg.enabled = parsed.enabled;
+                    if (parsed && typeof parsed.amplitude === 'number') cfg.amplitude = parsed.amplitude;
+                }
+            } catch (_) {}
+
+            if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                try {
+                    const saved = await window.__TAURI_INTERNALS__.invoke('get_unread_bounce');
+                    if (saved) {
+                        if (typeof saved.enabled === 'boolean') cfg.enabled = saved.enabled;
+                        if (typeof saved.amplitude === 'number') cfg.amplitude = saved.amplitude;
+                    }
+                } catch (e) {
+                    console.warn('获取未读弹跳配置失败:', e);
+                }
+            }
+
+            unreadBounceConfig = cfg;
+            localStorage.setItem('gotify_unread_bounce', JSON.stringify(cfg));
+
+            const toggle = document.getElementById('unreadBounceToggle');
+            if (toggle) toggle.checked = cfg.enabled;
+
+            const slider = document.getElementById('unreadBounceAmpSlider');
+            if (slider) slider.value = cfg.amplitude;
+
+            const valLabel = document.getElementById('unreadBounceAmpVal');
+            if (valLabel) valLabel.textContent = getBounceAmpText(cfg.amplitude);
+
+            const ampGroup = document.getElementById('unreadBounceAmpGroup');
+            if (ampGroup) {
+                ampGroup.style.opacity = cfg.enabled ? '1' : '0.45';
+                ampGroup.style.pointerEvents = cfg.enabled ? 'auto' : 'none';
+            }
+
+            applyBounceAmpStyle(cfg.amplitude);
+
+            document.querySelectorAll('.amp-preset').forEach(btn => {
+                const presetVal = parseInt(btn.dataset.val, 10);
+                if (presetVal === cfg.amplitude) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+
+            applyPreviewEffect();
+        }
+
+        // 弹跳开关变更
+        async function onUnreadBounceToggleChanged() {
+            const toggle = document.getElementById('unreadBounceToggle');
+            unreadBounceConfig.enabled = toggle ? toggle.checked : true;
+            const ampGroup = document.getElementById('unreadBounceAmpGroup');
+            if (ampGroup) {
+                ampGroup.style.opacity = unreadBounceConfig.enabled ? '1' : '0.45';
+                ampGroup.style.pointerEvents = unreadBounceConfig.enabled ? 'auto' : 'none';
+            }
+            localStorage.setItem('gotify_unread_bounce', JSON.stringify(unreadBounceConfig));
+            if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                try {
+                    await window.__TAURI_INTERNALS__.invoke('save_unread_bounce', {
+                        enabled: unreadBounceConfig.enabled,
+                        amplitude: unreadBounceConfig.amplitude
+                    });
+                } catch (e) {
+                    console.error('保存弹跳开关失败:', e);
+                }
+            }
+            applyPreviewEffect();
+        }
+
+        // 弹跳幅度实时拖动
+        function onUnreadBounceAmpInput(val) {
+            const v = parseInt(val, 10);
+            unreadBounceConfig.amplitude = v;
+            applyBounceAmpStyle(v);
+            const valLabel = document.getElementById('unreadBounceAmpVal');
+            if (valLabel) valLabel.textContent = getBounceAmpText(v);
+
+            document.querySelectorAll('.amp-preset').forEach(btn => {
+                const presetVal = parseInt(btn.dataset.val, 10);
+                if (presetVal === v) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+
+            applyPreviewEffect();
+        }
+
+        // 弹跳幅度保存
+        async function onUnreadBounceAmpChange(val) {
+            const v = parseInt(val, 10);
+            unreadBounceConfig.amplitude = v;
+            localStorage.setItem('gotify_unread_bounce', JSON.stringify(unreadBounceConfig));
+            if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                try {
+                    await window.__TAURI_INTERNALS__.invoke('save_unread_bounce', {
+                        enabled: unreadBounceConfig.enabled,
+                        amplitude: v
+                    });
+                } catch (e) {
+                    console.error('保存弹跳幅度失败:', e);
+                }
+            }
+        }
+
+        // 预设幅度快捷按钮点击
+        function setBounceAmpPreset(val) {
+            const slider = document.getElementById('unreadBounceAmpSlider');
+            if (slider) slider.value = val;
+            onUnreadBounceAmpInput(val);
+            onUnreadBounceAmpChange(val);
         }
 
         // 特效选择改变
@@ -1007,28 +1234,32 @@
         function applyPreviewEffect(effect) {
             const card = document.getElementById('unreadEffectPreviewCard');
             if (!card) return;
+            const selectEl = document.getElementById('unreadEffect');
+            const eff = effect || (selectEl ? selectEl.value : 'aurora');
+
             // 清理旧特效类
             const effectClasses = [
                 'unread-effect-aurora',
                 'unread-effect-pulse',
                 'unread-effect-beacon',
                 'unread-effect-ripple',
-                'unread-effect-bounce',
                 'unread-effect-border_stream',
+                'unread-bounce-active',
                 'unread-marked-read'
             ];
             card.classList.remove(...effectClasses);
-            if (effect && effect !== 'none') {
-                card.classList.add(`unread-effect-${effect}`);
+
+            if (eff && eff !== 'none') {
+                card.classList.add(`unread-effect-${eff}`);
+            }
+            if (unreadBounceConfig && unreadBounceConfig.enabled) {
+                card.classList.add('unread-bounce-active');
             }
         }
 
         // 鼠标移入预览卡片
         function previewCardHovered(el) {
             if (!el) return;
-            const selectEl = document.getElementById('unreadEffect');
-            const currentEffect = selectEl ? selectEl.value : 'aurora';
-            if (currentEffect === 'none') return;
             if (el.classList.contains('unread-marked-read')) return;
 
             // 触发平滑已阅淡出
@@ -1039,8 +1270,8 @@
                     'unread-effect-pulse',
                     'unread-effect-beacon',
                     'unread-effect-ripple',
-                    'unread-effect-bounce',
-                    'unread-effect-border_stream'
+                    'unread-effect-border_stream',
+                    'unread-bounce-active'
                 ];
                 el.classList.remove(...effectClasses);
             }, 350);
@@ -1048,9 +1279,9 @@
 
         // 重置预览卡片特效
         function resetPreviewEffect() {
-            const selectEl = document.getElementById('unreadEffect');
-            const effect = selectEl ? selectEl.value : 'aurora';
-            applyPreviewEffect(effect);
+            const card = document.getElementById('unreadEffectPreviewCard');
+            if (card) card.classList.remove('unread-marked-read');
+            applyPreviewEffect();
         }
 
         // 页面加载完成后初始化
@@ -1061,6 +1292,7 @@
             loadShowInDock();
             loadSoundSettings();
             loadUnreadEffect();
+            loadUnreadBounce();
             listenConnectionStatus();
         });
 

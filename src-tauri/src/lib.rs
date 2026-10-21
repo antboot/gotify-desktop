@@ -664,6 +664,45 @@ fn save_unread_effect(app: tauri::AppHandle, effect: String) -> Result<(), Strin
     Ok(())
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnreadBounceConfig {
+    pub enabled: bool,
+    pub amplitude: u32,
+}
+
+impl Default for UnreadBounceConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            amplitude: 6,
+        }
+    }
+}
+
+#[tauri::command]
+fn get_unread_bounce() -> UnreadBounceConfig {
+    let config_dir = get_config_dir();
+    let config_path = format!("{}/.gotify_unread_bounce.json", config_dir);
+    if let Ok(content) = std::fs::read_to_string(&config_path) {
+        if let Ok(cfg) = serde_json::from_str::<UnreadBounceConfig>(&content) {
+            return cfg;
+        }
+    }
+    UnreadBounceConfig::default()
+}
+
+#[tauri::command]
+fn save_unread_bounce(app: tauri::AppHandle, enabled: bool, amplitude: u32) -> Result<UnreadBounceConfig, String> {
+    let clamped_amp = amplitude.clamp(2, 24);
+    let cfg = UnreadBounceConfig { enabled, amplitude: clamped_amp };
+    let config_dir = get_config_dir();
+    let config_path = format!("{}/.gotify_unread_bounce.json", config_dir);
+    let _ = std::fs::write(&config_path, serde_json::to_string_pretty(&cfg).unwrap());
+    let _ = app.emit("tauri://unread-bounce-changed", serde_json::json!(cfg));
+    println!("🦘 已保存未读弹跳设置: enabled={}, amp={}px", enabled, clamped_amp);
+    Ok(cfg)
+}
+
 
 fn default_widget_opacity() -> f64 {
     0.70
@@ -1769,6 +1808,8 @@ pub fn run() {
             set_widget_mode_opacity,
             get_unread_effect,
             save_unread_effect,
+            get_unread_bounce,
+            save_unread_bounce,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
