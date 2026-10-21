@@ -129,6 +129,26 @@ mod macos_window {
                 }
             }
 
+            let shadow_sel = sel_registerName(b"setHasShadow:\0".as_ptr() as _);
+            msg_usize(win, shadow_sel, 0); // hasShadow: NO
+
+            let opaque_sel = sel_registerName(b"setOpaque:\0".as_ptr() as _);
+            msg_usize(win, opaque_sel, 0); // isOpaque: NO
+
+            let nscolor_cls = objc_getClass(b"NSColor\0".as_ptr() as _);
+            if !nscolor_cls.is_null() {
+                let clear_sel = sel_registerName(b"clearColor\0".as_ptr() as _);
+                let f_clear: unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void =
+                    std::mem::transmute(objc_msgSend as *const ());
+                let clear_color = f_clear(nscolor_cls, clear_sel);
+                if !clear_color.is_null() {
+                    let bg_sel = sel_registerName(b"setBackgroundColor:\0".as_ptr() as _);
+                    let f_bg: unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) =
+                        std::mem::transmute(objc_msgSend as *const ());
+                    f_bg(win, bg_sel, clear_color);
+                }
+            }
+
             // NSFloatingWindowLevel = 3 (float above all apps)
             msg_isize(win, level_sel, 3);
             // NSWindowCollectionBehaviorCanJoinAllApplications (262144) = Stage Manager ignores management
@@ -137,6 +157,29 @@ mod macos_window {
             // NSWindowCollectionBehaviorFullScreenAuxiliary (256)
             // NSWindowCollectionBehaviorIgnoresCycle (64)
             msg_usize(win, behavior_sel, 262144 | 256 | 64 | 16 | 1);
+
+            let button_sel = sel_registerName(b"standardWindowButton:\0".as_ptr() as _);
+            let hidden_sel = sel_registerName(b"setHidden:\0".as_ptr() as _);
+            let f_btn: unsafe extern "C" fn(*mut c_void, *mut c_void, usize) -> *mut c_void =
+                std::mem::transmute(objc_msgSend as *const ());
+            let f_hide: unsafe extern "C" fn(*mut c_void, *mut c_void, usize) =
+                std::mem::transmute(objc_msgSend as *const ());
+            for btn_type in 0..=2 {
+                let btn = f_btn(win, button_sel, btn_type);
+                if !btn.is_null() {
+                    f_hide(btn, hidden_sel, 1);
+                }
+            }
+
+            let inval_sel = sel_registerName(b"invalidateShadow\0".as_ptr() as _);
+            let f_inval: unsafe extern "C" fn(*mut c_void, *mut c_void) =
+                std::mem::transmute(objc_msgSend as *const ());
+            f_inval(win, inval_sel);
+
+            let order_front_sel = sel_registerName(b"orderFront:\0".as_ptr() as _);
+            let f_order: unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) =
+                std::mem::transmute(objc_msgSend as *const ());
+            f_order(win, order_front_sel, std::ptr::null_mut());
         } else {
             FLOATING_WIN_PTR.store(0, Ordering::Relaxed);
             msg_isize(win, level_sel, 0);

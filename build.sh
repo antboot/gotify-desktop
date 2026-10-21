@@ -91,7 +91,10 @@ if [ -d "$APP_PATH" ]; then
         TMP_DMG_DIR=$(mktemp -d)
         cp -R "$APP_PATH" "$TMP_DMG_DIR/"
         ln -s /Applications "$TMP_DMG_DIR/Applications"
-        DMG_FILE="$DMG_DIR/Gotify Notifier_0.4.0_aarch64.dmg"
+        APP_VERSION=$(grep '"version"' src-tauri/tauri.conf.json | head -n 1 | awk -F'"' '{print $4}')
+        [ -z "$APP_VERSION" ] && APP_VERSION="0.5.0"
+        ARCH_NAME=$(uname -m)
+        DMG_FILE="$DMG_DIR/Gotify Notifier_${APP_VERSION}_${ARCH_NAME}.dmg"
         rm -f "$DMG_FILE"
         hdiutil create -volname "Gotify Notifier" -srcfolder "$TMP_DMG_DIR" -ov -format UDZO "$DMG_FILE" > /dev/null 2>&1
         echo "✅ DMG 安装包打包完成: $DMG_FILE"
