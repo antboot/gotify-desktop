@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>桌面应用盒</title>
+    <style>
+        :root {
+            --bg-primary: #0f1419;
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --text-tertiary: #6b7280;
+            --accent: #6366f1;
+            --accent-hover: #4f46e5;
+            --danger: #ef4444;
+            --widget-opacity: 0.45;
+        }
+
+        [data-theme="light"] {
+            --bg-primary: #f5f7fa;
+            --text-primary: #1a1a2e;
+            --text-secondary: #4b5563;
+            --text-tertiary: #9ca3af;
+            --accent: #4f46e5;
+            --accent-hover: #4338ca;
+            --danger: #ef4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100vw;
+            height: 100vh;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+            background: transparent !important;
+            background-color: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Roboto, sans-serif;
+        }
+
+        .container {
+            width: 100vw;
+            height: 100vh;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-sizing: border-box;
+            display: flex;
+            align-items: stretch;
+            justify-content: stretch;
+            background: transparent !important;
+            background-color: transparent !important;
+            overflow: hidden;
+            border: none !important;
+            box-shadow: none !important;
+        }
+
+        /* 桌面应用盒卡片：16px 圆角与液态玻璃质感 */
+        .desktop-widget-card {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            border-radius: 16px !important;
+            overflow: hidden !important;
+            transform: translateZ(0);
+            -webkit-transform: translateZ(0);
+            will-change: transform, backdrop-filter;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            background: rgba(22, 28, 40, var(--widget-opacity, 0.45)) !important;
+            backdrop-filter: blur(32px) !important;
+            -webkit-backdrop-filter: blur(32px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.16) !important;
+            box-shadow:
+                inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.28),
+                inset 0 -1px 1px 0 rgba(0, 0, 0, 0.25),
+                inset 0 0 0 0.5px rgba(255, 255, 255, 0.08) !important;
+            display: flex !important;
+            flex-direction: column !important;
+            box-sizing: border-box !important;
+            color: #f3f4f6 !important;
+            user-select: none;
+            -webkit-user-select: none;
+            pointer-events: auto !important;
+            cursor: grab;
+        }
+
+        .desktop-widget-card.is-transitioning {
+            transition: background 0.35s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.35s ease, box-shadow 0.35s ease;
+        }
+
+        [data-theme="light"] .desktop-widget-card {
+            background: rgba(245, 247, 252, var(--widget-opacity, 0.45)) !important;
+            backdrop-filter: blur(32px) !important;
+            -webkit-backdrop-filter: blur(32px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.65) !important;
+            box-shadow:
+                inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.85),
+                inset 0 -1px 1px 0 rgba(0, 0, 0, 0.05),
+                inset 0 0 0 0.5px rgba(255, 255, 255, 0.35) !important;
+            color: #1a1a2e !important;
+        }
+
+        .widget-header {
+            height: 38px;
+            padding: 0 12px 0 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+            pointer-events: auto !important;
+            cursor: grab;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        [data-theme="light"] .widget-header {
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+        }
+
+        .widget-status {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: -0.2px;
+            cursor: grab;
+        }
+
+        .shelf-badge {
+            font-size: 10.5px;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 10px;
+            background: rgba(99, 102, 241, 0.25);
+            color: #818cf8;
+            border: 1px solid rgba(99, 102, 241, 0.3);
+        }
+
+        .widget-actions {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: default;
+        }
+
+        .icon-btn {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            width: 26px;
+            height: 26px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            font-size: 13px;
+            transition: all 0.15s ease;
+        }
+
+        .icon-btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+            color: var(--text-primary);
+        }
+
+        .icon-btn.close-btn:hover {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        /* 应用网格区 */
+        .shelf-content {
+            flex: 1;
+            position: relative;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 10px;
+            box-sizing: border-box;
+            cursor: default;
+        }
+
+        .shelf-content::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .shelf-content::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+
+        .app-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(66px, 1fr));
+            gap: 10px 8px;
+            align-items: start;
+        }
+
+        .app-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 6px 4px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), background 0.15s ease;
+            position: relative;
+            text-align: center;
+        }
+
+        .app-item:hover {
+            background: rgba(255, 255, 255, 0.12);
+            transform: translateY(-2px);
+        }
+
+        .app-item:active {
+            transform: scale(0.95);
+        }
+
+        [data-theme="light"] .app-item:hover {
+            background: rgba(0, 0, 0, 0.06);
+        }
+
+        .app-icon {
+            width: 46px;
+            height: 46px;
+            border-radius: 10px;
+            object-fit: contain;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+            margin-bottom: 5px;
+            pointer-events: none;
+        }
+
+        .app-title {
+            font-size: 11px;
+            font-weight: 500;
+            line-height: 1.25;
+            color: var(--text-primary);
+            max-width: 62px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            pointer-events: none;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+        }
+
+        [data-theme="light"] .app-title {
+            text-shadow: none;
+        }
+
+        /* 空状态 */
+        .shelf-empty {
+            height: 100%;
+            min-height: 140px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            text-align: center;
+            color: var(--text-tertiary);
+            padding: 16px;
+            border: 1.5px dashed rgba(255, 255, 255, 0.18);
+            border-radius: 12px;
+            margin: 6px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        .shelf-empty:hover {
+            border-color: rgba(99, 102, 241, 0.5);
+            background: rgba(99, 102, 241, 0.05);
+            color: var(--text-secondary);
+        }
+
+        [data-theme="light"] .shelf-empty {
+            border-color: rgba(0, 0, 0, 0.15);
+        }
+
+        .shelf-empty-icon {
+            font-size: 28px;
+            opacity: 0.8;
+        }
+
+        .shelf-empty-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .shelf-empty-hint {
+            font-size: 11px;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        /* 拖拽浮层 (Dropzone Overlay) */
+        .dropzone-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(99, 102, 241, 0.25);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 2px dashed #818cf8;
+            border-radius: 16px;
+            z-index: 100;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: #ffffff;
+            font-weight: 600;
+            font-size: 14px;
+            pointer-events: none;
+        }
+
+        .dropzone-overlay.active {
+            display: flex;
+            animation: fadeIn 0.15s ease-out;
+        }
+
+        /* 右键菜单 */
+        .context-menu {
+            position: fixed;
+            background: rgba(30, 36, 50, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 10px;
+            padding: 5px;
+            min-width: 160px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+            z-index: 1000;
+            display: none;
+            animation: fadeIn 0.15s ease-out;
+        }
+
+        [data-theme="light"] .context-menu {
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid rgba(0, 0, 0, 0.12);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        .context-menu-item {
+            padding: 7px 10px;
+            font-size: 12px;
+            color: var(--text-primary);
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.12s ease;
+        }
+
+        .context-menu-item:hover {
+            background: var(--accent);
+            color: #ffffff;
+        }
+
+        .context-menu-item.danger:hover {
+            background: var(--danger);
+            color: #ffffff;
+        }
+
+        .context-menu-divider {
+            height: 1px;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 4px 0;
+        }
+
+        [data-theme="light"] .context-menu-divider {
+            background: rgba(0, 0, 0, 0.08);
+        }
+
+        /* 透明度调节 Popover */
+        .widget-opacity-popover {
+            position: absolute;
+            top: 42px;
+            right: 12px;
+            z-index: 1000;
+            width: 210px;
+            background: rgba(30, 36, 50, 0.96);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 12px;
+            padding: 12px;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            animation: fadeIn 0.15s ease-out;
+        }
+
+        [data-theme="light"] .widget-opacity-popover {
+            background: rgba(255, 255, 255, 0.96);
+            border: 1px solid rgba(0, 0, 0, 0.12);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+        }
+
+        .popover-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .popover-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .opacity-val-badge {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .opacity-slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 4px;
+            border-radius: 2px;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+        }
+
+        .opacity-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--accent);
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .preset-row {
+            display: flex;
+            gap: 4px;
+            justify-content: space-between;
+        }
+
+        .preset-chip {
+            flex: 1;
+            padding: 3px 0;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-secondary);
+            font-size: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .preset-chip:hover {
+            background: rgba(255, 255, 255, 0.16);
+            color: var(--text-primary);
+        }
+
+        .preset-chip.active {
+            background: var(--accent);
+            color: #ffffff;
+            border-color: var(--accent);
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.96);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="desktop-widget-card" id="shelfCard" oncontextmenu="onCardContextMenu(event)">
+            <!-- 头部 -->
+            <div class="widget-header" data-tauri-drag-region onmousedown="onHeaderMouseDown(event)">
+                <div class="widget-status" data-tauri-drag-region>
+                    <span>🗂️</span>
+                    <span id="shelfTitle">应用盒</span>
+                    <span id="shelfBadge" class="shelf-badge">0</span>
+                </div>
+                <div class="widget-actions" onmousedown="event.stopPropagation()">
+                    <button class="icon-btn" onclick="onAddAppClick(event)" title="添加应用...">➕</button>
+                    <button class="icon-btn" id="opacityBtn" onclick="toggleOpacityPopover(event)" title="调节透明度">💧</button>
+                    <button class="icon-btn" onclick="toggleTheme(event)" title="切换深/浅主题">🌓</button>
+                    <button class="icon-btn close-btn" onclick="closeShelf(event)" title="隐藏应用盒">✕</button>
+                </div>
+            </div>
+
+            <!-- 应用列表 -->
+            <div class="shelf-content" id="shelfContent">
+                <div class="app-grid" id="appGrid"></div>
+            </div>
+
+            <!-- 拖拽提示浮层 -->
+            <div class="dropzone-overlay" id="dropOverlay">
+                <span style="font-size: 26px;">📥</span>
+                <span>释放以添加到应用盒</span>
+            </div>
+
+            <!-- 透明度弹窗 -->
+            <div class="widget-opacity-popover" id="opacityPopover" style="display: none;" onmousedown="event.stopPropagation()">
+                <div class="popover-header">
+                    <span class="popover-title">透明度调节</span>
+                    <span class="opacity-val-badge" id="opacityBadge">45%</span>
+                </div>
+                <input type="range" class="opacity-slider" id="opacitySlider" min="10" max="100" value="45"
+                    oninput="onOpacityInput(event)" onchange="onOpacityChange(event)">
+                <div class="preset-row">
+                    <button class="preset-chip" onclick="setPresetOpacity(0.20)">20%</button>
+                    <button class="preset-chip" onclick="setPresetOpacity(0.35)">35%</button>
+                    <button class="preset-chip" onclick="setPresetOpacity(0.50)">50%</button>
+                    <button class="preset-chip" onclick="setPresetOpacity(0.75)">75%</button>
+                    <button class="preset-chip" onclick="setPresetOpacity(0.95)">95%</button>
+                </div>
+            </div>
+
+            <!-- 右键菜单 -->
+            <div class="context-menu" id="contextMenu" onmousedown="event.stopPropagation()">
+                <!-- 应用项菜单 -->
+                <div id="appMenuSection" style="display: none;">
+                    <div class="context-menu-item" onclick="onContextOpenApp()">
+                        <span>🚀</span> <span>打开应用</span>
+                    </div>
+                    <div class="context-menu-item" onclick="onContextShowInFinder()">
+                        <span>📂</span> <span>在访达中显示</span>
+                    </div>
+                    <div class="context-menu-divider"></div>
+                    <div class="context-menu-item danger" onclick="onContextRemoveApp()">
+                        <span>🗑️</span> <span>从此盒中移除</span>
+                    </div>
+                    <div class="context-menu-divider"></div>
+                </div>
+                <!-- 卡片全局菜单 -->
+                <div class="context-menu-item" onclick="toggleShelfAlwaysOnTop()">
+                    <span id="pinIcon">📌</span> <span id="pinText">悬浮置顶 (前台)</span>
+                </div>
+                <div class="context-menu-item" onclick="toggleOpacityPopover(event)">
+                    <span>💧</span> <span>调节透明度</span>
+                </div>
+                <div class="context-menu-item" onclick="toggleTheme(event)">
+                    <span>🌓</span> <span>切换深/浅主题</span>
+                </div>
+                <div class="context-menu-item" onclick="onAddAppClick(event)">
+                    <span>➕</span> <span>添加应用程序...</span>
+                </div>
+                <div class="context-menu-divider"></div>
+                <div class="context-menu-item" onclick="closeShelf(event)">
+                    <span>✕</span> <span>隐藏此应用盒</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tauri v2 事件 API -->
+    <script type="module">
+        import { listen } from 'https://cdn.jsdelivr.net/npm/@tauri-apps/api@2/event.js';
+        window.__TAURI_LISTEN__ = listen;
+    </script>
+
+    <script>
+        let appItems = [];
+        let isAlwaysOnTop = false;
+        let floatingOpacity = 0.92;
+        let desktopOpacity = 0.35;
+        let currentOpacity = 0.35;
+        let activeContextItemId = null;
+        let activeContextItemPath = null;
+
+        const invoke = (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke) ?
+            window.__TAURI_INTERNALS__.invoke : async () => {};
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', async () => {
+            initTheme();
+            await loadShelfConfig();
+            await refreshShelfItems();
+            setupDragDropListeners();
+        });
+
+        // 加载配置
+        async function loadShelfConfig() {
+            try {
+                const cfg = await invoke('get_app_shelf_config');
+                if (cfg) {
+                    if (typeof cfg.floating_opacity === 'number') floatingOpacity = cfg.floating_opacity;
+                    if (typeof cfg.desktop_opacity === 'number') desktopOpacity = cfg.desktop_opacity;
+                    isAlwaysOnTop = !!cfg.always_on_top;
+                    updatePinUI(isAlwaysOnTop);
+                    const initOp = isAlwaysOnTop ? floatingOpacity : desktopOpacity;
+                    setShelfOpacity(initOp, false, false);
+                }
+            } catch (e) {
+                console.warn('获取应用盒配置失败:', e);
+            }
+        }
+
+        // 刷新应用列表
+        async function refreshShelfItems() {
+            try {
+                const items = await invoke('get_app_shelf_items');
+                appItems = Array.isArray(items) ? items : [];
+                renderAppGrid();
+            } catch (e) {
+                console.error('获取应用列表失败:', e);
+            }
+        }
+
+        // 渲染网格
+        function renderAppGrid() {
+            const grid = document.getElementById('appGrid');
+            const badge = document.getElementById('shelfBadge');
+            if (badge) badge.textContent = appItems.length;
+
+            if (appItems.length === 0) {
+                grid.innerHTML = `
+                    <div class="shelf-empty" onclick="onAddAppClick(event)">
+                        <div class="shelf-empty-icon">🗂️</div>
+                        <div class="shelf-empty-title">拖拽应用到此处</div>
+                        <div class="shelf-empty-hint">从访达将常用 App 拖入生成快捷方式<br>或点击此处浏览选择</div>
+                    </div>
+                `;
+                grid.style.display = 'block';
+                return;
+            }
+
+            grid.style.display = 'grid';
+            grid.innerHTML = appItems.map(item => {
+                const iconSrc = item.icon_data || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="%236366f1"><rect width="20" height="20" x="2" y="2" rx="5"/></svg>';
+                return `
+                    <div class="app-item" data-id="${item.id}" data-path="${encodeURIComponent(item.path)}"
+                        onclick="onAppItemClick('${encodeURIComponent(item.path)}')"
+                        oncontextmenu="onAppItemContextMenu(event, '${item.id}', '${encodeURIComponent(item.path)}')"
+                        title="${escapeHtml(item.name)}&#10;${escapeHtml(item.path)}">
+                        <img class="app-icon" src="${iconSrc}" alt="${escapeHtml(item.name)}" draggable="false">
+                        <span class="app-title">${escapeHtml(item.name)}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function escapeHtml(text) {
+            return (text || '').replace(/[&<>"']/g, m => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[m]);
+        }
+
+        // 点击应用打开
+        async function onAppItemClick(encodedPath) {
+            const path = decodeURIComponent(encodedPath);
+            try {
+                await invoke('open_app_item', { path });
+            } catch (e) {
+                console.error('打开应用失败:', e);
+            }
+        }
+
+        // 添加应用
+        async function onAddAppClick(e) {
+            if (e) e.stopPropagation();
+            closeContextMenu();
+            try {
+                const items = await invoke('pick_and_add_app');
+                if (Array.isArray(items)) {
+                    appItems = items;
+                    renderAppGrid();
+                }
+            } catch (e) {
+                console.error('选择应用失败:', e);
+            }
+        }
+
+        async function tauriListen(eventName, cb) {
+            if (typeof window.__TAURI_LISTEN__ === 'function') {
+                return window.__TAURI_LISTEN__(eventName, cb);
+            }
+            if (window.__TAURI__ && window.__TAURI__.event && typeof window.__TAURI__.event.listen === 'function') {
+                return window.__TAURI__.event.listen(eventName, cb);
+            }
+            if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke && window.__TAURI_INTERNALS__.transformCallback) {
+                return window.__TAURI_INTERNALS__.invoke('plugin:event|listen', {
+                    event: eventName,
+                    target: { kind: 'Any' },
+                    handler: window.__TAURI_INTERNALS__.transformCallback(cb)
+                });
+            }
+            return null;
+        }
+
+        // 拖拽与更新监听
+        function setupDragDropListeners() {
+            const overlay = document.getElementById('dropOverlay');
+
+            // 监听后端派发的实时应用列表更新
+            tauriListen('app-shelf-updated', (event) => {
+                if (event && Array.isArray(event.payload)) {
+                    appItems = event.payload;
+                    renderAppGrid();
+                }
+            });
+
+            // 监听系统原生拖拽进入/移出/放下
+            tauriListen('tauri://drag-enter', () => {
+                overlay.classList.add('active');
+            });
+            tauriListen('tauri://drag-leave', () => {
+                overlay.classList.remove('active');
+            });
+            tauriListen('tauri://drag-drop', async (event) => {
+                overlay.classList.remove('active');
+                if (event && event.payload && Array.isArray(event.payload.paths)) {
+                    try {
+                        const updated = await invoke('add_apps_to_shelf', { paths: event.payload.paths });
+                        if (Array.isArray(updated)) {
+                            appItems = updated;
+                            renderAppGrid();
+                        }
+                    } catch (e) {
+                        console.error('添加拖拽应用失败:', e);
+                    }
+                }
+            });
+
+            // HTML5 drag fallback
+            window.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                overlay.classList.add('active');
+            });
+            window.addEventListener('dragleave', (e) => {
+                if (e.relatedTarget === null) overlay.classList.remove('active');
+            });
+            window.addEventListener('drop', (e) => {
+                e.preventDefault();
+                overlay.classList.remove('active');
+            });
+        }
+
+        // 拖拽窗口移动
+        function onHeaderMouseDown(event) {
+            if (event.button !== 0) return;
+            const target = event.target;
+            if (target.closest('.icon-btn') || target.closest('.widget-opacity-popover')) return;
+
+            if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                window.__TAURI_INTERNALS__.invoke('start_dragging_window').catch(() => {});
+            }
+        }
+
+        // 右键菜单管理
+        function onAppItemContextMenu(e, id, encodedPath) {
+            e.preventDefault();
+            e.stopPropagation();
+            activeContextItemId = id;
+            activeContextItemPath = decodeURIComponent(encodedPath);
+
+            const menu = document.getElementById('contextMenu');
+            const appSection = document.getElementById('appMenuSection');
+            appSection.style.display = 'block';
+
+            showMenuAt(e.clientX, e.clientY);
+        }
+
+        function onCardContextMenu(e) {
+            e.preventDefault();
+            activeContextItemId = null;
+            activeContextItemPath = null;
+
+            const menu = document.getElementById('contextMenu');
+            const appSection = document.getElementById('appMenuSection');
+            appSection.style.display = 'none';
+
+            showMenuAt(e.clientX, e.clientY);
+        }
+
+        function showMenuAt(x, y) {
+            const menu = document.getElementById('contextMenu');
+            menu.style.display = 'block';
+            const w = menu.offsetWidth || 160;
+            const h = menu.offsetHeight || 150;
+            const winW = window.innerWidth;
+            const winH = window.innerHeight;
+
+            const posX = (x + w > winW) ? (winW - w - 8) : x;
+            const posY = (y + h > winH) ? (winH - h - 8) : y;
+
+            menu.style.left = `${Math.max(8, posX)}px`;
+            menu.style.top = `${Math.max(8, posY)}px`;
+        }
+
+        function closeContextMenu() {
+            const menu = document.getElementById('contextMenu');
+            if (menu) menu.style.display = 'none';
+        }
+
+        window.addEventListener('pointerdown', (e) => {
+            const menu = document.getElementById('contextMenu');
+            if (menu && menu.style.display !== 'none' && !menu.contains(e.target)) {
+                menu.style.display = 'none';
+            }
+            const popover = document.getElementById('opacityPopover');
+            const btn = document.getElementById('opacityBtn');
+            if (popover && popover.style.display !== 'none' && !popover.contains(e.target) && !btn.contains(e.target)) {
+                popover.style.display = 'none';
+            }
+        }, { capture: true });
+
+        // 右键具体操作
+        async function onContextOpenApp() {
+            closeContextMenu();
+            if (activeContextItemPath) {
+                await invoke('open_app_item', { path: activeContextItemPath });
+            }
+        }
+
+        async function onContextShowInFinder() {
+            closeContextMenu();
+            if (activeContextItemPath) {
+                await invoke('show_in_finder', { path: activeContextItemPath });
+            }
+        }
+
+        async function onContextRemoveApp() {
+            closeContextMenu();
+            if (activeContextItemId) {
+                try {
+                    const updated = await invoke('remove_app_from_shelf', { id: activeContextItemId });
+                    if (Array.isArray(updated)) {
+                        appItems = updated;
+                        renderAppGrid();
+                    }
+                } catch (e) {
+                    console.error('移除应用失败:', e);
+                }
+            }
+        }
+
+        // 置顶与常驻切换
+        async function toggleShelfAlwaysOnTop() {
+            closeContextMenu();
+            const targetState = !isAlwaysOnTop;
+            try {
+                const res = await invoke('set_shelf_always_on_top', { alwaysOnTop: targetState });
+                isAlwaysOnTop = !!res;
+                updatePinUI(isAlwaysOnTop);
+                const targetOpacity = isAlwaysOnTop ? floatingOpacity : desktopOpacity;
+                setShelfOpacity(targetOpacity, true, true);
+            } catch (e) {
+                console.error('切换置顶状态失败:', e);
+            }
+        }
+
+        function updatePinUI(pinned) {
+            const pinIcon = document.getElementById('pinIcon');
+            const pinText = document.getElementById('pinText');
+            if (pinIcon) pinIcon.textContent = pinned ? '🖥️' : '📌';
+            if (pinText) pinText.textContent = pinned ? '常驻桌面 (底层)' : '悬浮置顶 (前台)';
+        }
+
+        // 透明度管理
+        function setShelfOpacity(val, persist = true, animate = false) {
+            const clamped = Math.max(0.05, Math.min(1.0, parseFloat(val) || 0.35));
+            currentOpacity = clamped;
+            if (isAlwaysOnTop) {
+                floatingOpacity = clamped;
+            } else {
+                desktopOpacity = clamped;
+            }
+
+            if (animate) {
+                const card = document.getElementById('shelfCard');
+                if (card) {
+                    card.classList.add('is-transitioning');
+                    clearTimeout(card._transTimer);
+                    card._transTimer = setTimeout(() => {
+                        card.classList.remove('is-transitioning');
+                    }, 400);
+                }
+            }
+
+            document.documentElement.style.setProperty('--widget-opacity', clamped.toString());
+
+            const percent = Math.round(clamped * 100);
+            const badge = document.getElementById('opacityBadge');
+            if (badge) badge.textContent = `${percent}%`;
+
+            const slider = document.getElementById('opacitySlider');
+            if (slider) slider.value = percent;
+
+            document.querySelectorAll('.preset-chip').forEach(btn => {
+                const btnVal = parseFloat(btn.textContent) || 0;
+                if (Math.abs(btnVal - percent) < 3) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+
+            if (persist) {
+                const mode = isAlwaysOnTop ? 'floating' : 'desktop';
+                invoke('set_shelf_mode_opacity', { mode, opacity: clamped }).catch(() => {});
+            }
+        }
+
+        function toggleOpacityPopover(e) {
+            if (e) e.stopPropagation();
+            closeContextMenu();
+            const popover = document.getElementById('opacityPopover');
+            if (!popover) return;
+            const isVisible = popover.style.display !== 'none';
+            popover.style.display = isVisible ? 'none' : 'flex';
+        }
+
+        function onOpacityInput(e) {
+            const val = parseInt(e.target.value, 10) / 100;
+            setShelfOpacity(val, false, false);
+        }
+
+        function onOpacityChange(e) {
+            const val = parseInt(e.target.value, 10) / 100;
+            setShelfOpacity(val, true, false);
+        }
+
+        function setPresetOpacity(val) {
+            setShelfOpacity(val, true, true);
+        }
+
+        // 主题切换
+        function initTheme() {
+            const saved = localStorage.getItem('shelf_theme') || localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', saved);
+        }
+
+        function toggleTheme(e) {
+            if (e) e.stopPropagation();
+            closeContextMenu();
+            const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+            const next = cur === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('shelf_theme', next);
+        }
+
+        // 关闭/隐藏
+        async function closeShelf(e) {
+            if (e) e.stopPropagation();
+            try {
+                await invoke('toggle_app_shelf_window');
+            } catch (e) {
+                console.error('隐藏应用盒失败:', e);
+            }
+        }
+    </script>
+</body>
+
+</html>

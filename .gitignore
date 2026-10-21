@@ -43,3 +43,4 @@ src-tauri/target/
 WixTools/
 start.ps1
 *.bat
+*.dmg

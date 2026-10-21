@@ -869,6 +869,9 @@
             <div class="context-menu-item" id="contextMenuPinItem" onclick="toggleWindowAlwaysOnTop(event)">
                 <span id="contextMenuPinIcon">📌</span> <span id="contextMenuPinText">悬浮置顶 (前台)</span>
             </div>
+            <div class="context-menu-item" onclick="toggleAppShelf(event)">
+                <span>🗂️</span> <span>桌面应用盒</span>
+            </div>
             <div class="context-menu-item" onclick="cycleWidgetOpacity(event)">
                 <span>💧</span> <span>调节透明度</span>
             </div>
@@ -957,6 +960,23 @@
             } catch (e) {
                 console.error('❌ 切换窗口置顶失败:', e);
                 updatePinButtonUI(!targetState);
+            }
+        }
+
+        async function toggleAppShelf(event) {
+            if (event) {
+                if (typeof event.preventDefault === 'function') event.preventDefault();
+                if (typeof event.stopPropagation === 'function') event.stopPropagation();
+            }
+            const menu = document.getElementById('contextMenu');
+            if (menu) menu.style.display = 'none';
+
+            try {
+                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                    await window.__TAURI_INTERNALS__.invoke('toggle_app_shelf_window');
+                }
+            } catch (e) {
+                console.error('❌ 切换应用盒失败:', e);
             }
         }
 

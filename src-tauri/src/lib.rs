@@ -17,9 +17,27 @@ mod macos_window {
     use std::ffi::{c_char, c_void};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    // The pointer of the window we want to override, so our constrainFrameRect
-    // implementation can return early for other windows (if any exist).
-    static FLOATING_WIN_PTR: AtomicUsize = AtomicUsize::new(0);
+    // 记录所有由本程序纳管的桌面小组件窗口指针（支持通知窗口、应用盒窗口等）
+    static MANAGED_WINS: [AtomicUsize; 4] = [AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0)];
+
+    fn register_managed_win(win: *mut c_void) {
+        let w = win as usize;
+        if MANAGED_WINS.iter().any(|a| a.load(Ordering::Relaxed) == w) {
+            return;
+        }
+        for a in &MANAGED_WINS {
+            if a.compare_exchange(0, w, Ordering::Relaxed, Ordering::Relaxed).is_ok() {
+                break;
+            }
+        }
+    }
+
+    fn unregister_managed_win(win: *mut c_void) {
+        let w = win as usize;
+        for a in &MANAGED_WINS {
+            let _ = a.compare_exchange(w, 0, Ordering::Relaxed, Ordering::Relaxed);
+        }
+    }
 
     #[link(name = "objc", kind = "dylib")]
     extern "C" {
@@ -63,9 +81,8 @@ mod macos_window {
         mut r: CGRect,
         screen: *mut c_void,
     ) -> CGRect {
-        // Only override for the pinned Gotify window.
-        if _self != FLOATING_WIN_PTR.load(Ordering::Relaxed) as *mut c_void {
-            // For any other window: just return frame unchanged (safe fallback).
+        let w = _self as usize;
+        if !MANAGED_WINS.iter().any(|a| a.load(Ordering::Relaxed) == w) {
             return r;
         }
         if !screen.is_null() {
@@ -113,8 +130,7 @@ mod macos_window {
         let imp_fn: unsafe extern "C" fn() = std::mem::transmute(custom_constrain as *const ());
 
         if boxed.enable {
-            // Store window pointer so custom_constrain knows which window to override.
-            FLOATING_WIN_PTR.store(win as usize, Ordering::Relaxed);
+            register_managed_win(win);
 
             // Add constrainFrameRect to the window's existing class (tao's per-window subclass).
             // class_addMethod only succeeds if the method is NOT already in this exact class
@@ -181,7 +197,7 @@ mod macos_window {
                 std::mem::transmute(objc_msgSend as *const ());
             f_order(win, order_front_sel, std::ptr::null_mut());
         } else {
-            FLOATING_WIN_PTR.store(0, Ordering::Relaxed);
+            unregister_managed_win(win);
             msg_isize(win, level_sel, 0);
             msg_usize(win, behavior_sel, 0);
         }
@@ -211,7 +227,7 @@ mod macos_window {
         let imp_fn: unsafe extern "C" fn() = std::mem::transmute(custom_constrain as *const ());
 
         if boxed.enable {
-            FLOATING_WIN_PTR.store(win as usize, Ordering::Relaxed);
+            register_managed_win(win);
             let cls = object_getClass(win);
             let added = class_addMethod(cls, constrain_sel, imp_fn, types);
             if !added {
@@ -283,7 +299,7 @@ mod macos_window {
                 std::mem::transmute(objc_msgSend as *const ());
             f_order(win, order_back_sel, std::ptr::null_mut());
         } else {
-            FLOATING_WIN_PTR.store(0, Ordering::Relaxed);
+            unregister_managed_win(win);
 
             // 恢复红黄绿按钮显示（始终保持在窗口内部左上角，绝不脱离或漂出窗口）
             let button_sel = sel_registerName(b"standardWindowButton:\0".as_ptr() as _);
@@ -1564,6 +1580,16 @@ pub fn run() {
                 }
             });
 
+            // 若应用盒此前处于开启状态，启动时自动恢复显示桌面应用盒
+            let shelf_cfg = load_app_shelf_config_from_file();
+            if shelf_cfg.is_open {
+                let shelf_app = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+                    let _ = create_app_shelf_window(&shelf_app);
+                });
+            }
+
             // 创建系统托盘
             use tauri::{menu::{Menu, MenuItem}};
 
@@ -1578,12 +1604,13 @@ pub fn run() {
             let show_in_dock = get_show_in_dock();
             let initial_dock_text = get_dock_menu_text(show_in_dock);
 
-            let toggle_item = MenuItem::with_id(app, "toggle", "隐藏小组件", true, None::<&str>)?;
+            let toggle_item = MenuItem::with_id(app, "toggle", "隐藏通知小组件", true, None::<&str>)?;
+            let shelf_item = MenuItem::with_id(app, "shelf", "🗂️ 桌面应用盒", true, None::<&str>)?;
             let pin_item = MenuItem::with_id(app, "pin", initial_pin_text, true, None::<&str>)?;
             let dock_item = MenuItem::with_id(app, "dock", initial_dock_text, true, None::<&str>)?;
             let settings_item = MenuItem::with_id(app, "settings", "设置", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-            let tray_menu = Menu::with_items(app, &[&toggle_item, &pin_item, &dock_item, &settings_item, &quit_item])?;
+            let tray_menu = Menu::with_items(app, &[&toggle_item, &shelf_item, &pin_item, &dock_item, &settings_item, &quit_item])?;
 
             // 保存菜单项到状态供实时双向同步
             let state: tauri::State<AppState> = app.state();
@@ -1665,6 +1692,12 @@ pub fn run() {
                                 }
                             }
                         }
+                        "shelf" => {
+                            let app_handle = app.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let _ = toggle_app_shelf_window(app_handle).await;
+                            });
+                        }
                         "pin" => {
                             let _ = toggle_window_always_on_top(app.clone());
                         }
@@ -1699,6 +1732,12 @@ pub fn run() {
                 if window.label() == "main" {
                     let _ = window.hide();
                     api.prevent_close();
+                } else if window.label() == "app_shelf" {
+                    let _ = window.hide();
+                    let mut cfg = load_app_shelf_config_from_file();
+                    cfg.is_open = false;
+                    let _ = save_app_shelf_config_to_file(&cfg);
+                    api.prevent_close();
                 }
             }
             tauri::WindowEvent::Focused(focused) => {
@@ -1717,6 +1756,16 @@ pub fn run() {
                         {
                             if let Ok(hwnd) = window.hwnd() {
                                 windows_window::set_desktop_pin(hwnd.0 as isize, true);
+                            }
+                        }
+                    }
+                } else if window.label() == "app_shelf" && !focused {
+                    let cfg = load_app_shelf_config_from_file();
+                    if !cfg.always_on_top {
+                        #[cfg(target_os = "macos")]
+                        {
+                            if let Ok(ns_win) = window.ns_window() {
+                                macos_window::schedule_order_back(ns_win as *mut std::ffi::c_void);
                             }
                         }
                     }
@@ -1741,6 +1790,11 @@ pub fn run() {
                             }
                         });
                     }
+                } else if window.label() == "app_shelf" {
+                    let mut cfg = load_app_shelf_config_from_file();
+                    cfg.window_x = Some(pos.x);
+                    cfg.window_y = Some(pos.y);
+                    let _ = save_app_shelf_config_to_file(&cfg);
                 }
             }
             tauri::WindowEvent::Resized(size) => {
@@ -1760,6 +1814,17 @@ pub fn run() {
                         cfg.widget_height = logical_h;
                         let _ = save_widget_config_to_file(&cfg);
                     }
+                } else if window.label() == "app_shelf" {
+                    let factor = window.scale_factor().unwrap_or(1.0);
+                    let logical_w = ((size.width as f64) / factor).round() as u32;
+                    let logical_h = ((size.height as f64) / factor).round() as u32;
+
+                    if logical_w >= 180 && logical_h >= 120 {
+                        let mut cfg = load_app_shelf_config_from_file();
+                        cfg.window_width = logical_w;
+                        cfg.window_height = logical_h;
+                        let _ = save_app_shelf_config_to_file(&cfg);
+                    }
                 }
             }
             tauri::WindowEvent::ThemeChanged(theme) => {
@@ -1775,6 +1840,19 @@ pub fn run() {
                 let _ = window.emit("tauri://theme-changed", serde_json::json!({
                     "theme": theme_str
                 }));
+            }
+            tauri::WindowEvent::DragDrop(drag_event) => {
+                if window.label() == "app_shelf" {
+                    match drag_event {
+                        tauri::DragDropEvent::Drop { paths, .. } => {
+                            let str_paths: Vec<String> = paths.iter().map(|p| p.to_string_lossy().to_string()).collect();
+                            if let Ok(updated) = add_apps_to_shelf(str_paths) {
+                                let _ = window.emit("app-shelf-updated", updated);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
             }
             _ => {}
         })
@@ -1810,6 +1888,18 @@ pub fn run() {
             save_unread_effect,
             get_unread_bounce,
             save_unread_bounce,
+            toggle_app_shelf_window,
+            get_app_shelf_items,
+            add_apps_to_shelf,
+            remove_app_from_shelf,
+            open_app_item,
+            show_in_finder,
+            pick_and_add_app,
+            get_app_shelf_config,
+            save_app_shelf_config,
+            set_shelf_always_on_top,
+            set_shelf_opacity,
+            set_shelf_mode_opacity,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -2090,11 +2180,8 @@ fn toggle_window_always_on_top(app: tauri::AppHandle) -> Result<bool, String> {
 }
 
 #[tauri::command]
-fn start_dragging_window(app: tauri::AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("main") {
-        window.start_dragging().map_err(|e| format!("拖动窗口失败: {}", e))?;
-    }
-    Ok(())
+fn start_dragging_window(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.start_dragging().map_err(|e| format!("拖动窗口失败: {}", e))
 }
 
 #[tauri::command]
@@ -2152,6 +2239,394 @@ async fn set_widget_mode_opacity(mode: String, opacity: f64) -> Result<f64, Stri
     config.opacity = clamped;
     save_widget_config_to_file(&config)?;
     println!("💾 已保存 {} 模式透明度: {:.2}", mode, clamped);
+    Ok(clamped)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 桌面应用快捷收纳盒 (Desktop App Shelf)
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(target_os = "macos")]
+extern "C" {
+    fn macos_get_display_name(file_path: *const std::ffi::c_char) -> *mut std::ffi::c_char;
+    fn macos_get_icon_png(file_path: *const std::ffi::c_char, target_size: i32, out_len: *mut i32) -> *mut u8;
+    fn macos_pick_app_file() -> *mut std::ffi::c_char;
+    fn free(ptr: *mut std::ffi::c_void);
+}
+
+#[cfg(not(target_os = "macos"))]
+#[allow(dead_code)]
+unsafe fn macos_get_display_name(_file_path: *const std::ffi::c_char) -> *mut std::ffi::c_char { std::ptr::null_mut() }
+#[cfg(not(target_os = "macos"))]
+#[allow(dead_code)]
+unsafe fn macos_get_icon_png(_file_path: *const std::ffi::c_char, _target_size: i32, _out_len: *mut i32) -> *mut u8 { std::ptr::null_mut() }
+#[cfg(not(target_os = "macos"))]
+#[allow(dead_code)]
+unsafe fn macos_pick_app_file() -> *mut std::ffi::c_char { std::ptr::null_mut() }
+#[cfg(not(target_os = "macos"))]
+#[allow(dead_code)]
+unsafe fn free(_ptr: *mut std::ffi::c_void) {}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct AppShelfItem {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub icon_data: String,
+    pub added_at: u64,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct AppShelfConfig {
+    pub window_x: Option<i32>,
+    pub window_y: Option<i32>,
+    pub window_width: u32,
+    pub window_height: u32,
+    pub opacity: f64,
+    pub floating_opacity: f64,
+    pub desktop_opacity: f64,
+    pub always_on_top: bool,
+    pub is_open: bool,
+}
+
+impl Default for AppShelfConfig {
+    fn default() -> Self {
+        AppShelfConfig {
+            window_x: None,
+            window_y: None,
+            window_width: 320,
+            window_height: 240,
+            opacity: 0.35,
+            floating_opacity: 0.92,
+            desktop_opacity: 0.35,
+            always_on_top: false,
+            is_open: true,
+        }
+    }
+}
+
+fn load_app_shelf_items_from_file() -> Vec<AppShelfItem> {
+    let config_dir = get_config_dir();
+    let path = format!("{}/.gotify_app_shelf.json", config_dir);
+    if let Ok(content) = std::fs::read_to_string(&path) {
+        if let Ok(items) = serde_json::from_str::<Vec<AppShelfItem>>(&content) {
+            return items;
+        }
+    }
+    Vec::new()
+}
+
+fn save_app_shelf_items_to_file(items: &[AppShelfItem]) -> Result<(), String> {
+    let config_dir = get_config_dir();
+    let path = format!("{}/.gotify_app_shelf.json", config_dir);
+    let json = serde_json::to_string_pretty(items)
+        .map_err(|e| format!("序列化应用盒失败: {}", e))?;
+    std::fs::write(&path, json).map_err(|e| format!("写入应用盒配置失败: {}", e))
+}
+
+fn load_app_shelf_config_from_file() -> AppShelfConfig {
+    let config_dir = get_config_dir();
+    let path = format!("{}/.gotify_app_shelf_config.json", config_dir);
+    if let Ok(content) = std::fs::read_to_string(&path) {
+        if let Ok(cfg) = serde_json::from_str::<AppShelfConfig>(&content) {
+            return cfg;
+        }
+    }
+    AppShelfConfig::default()
+}
+
+fn save_app_shelf_config_to_file(config: &AppShelfConfig) -> Result<(), String> {
+    let config_dir = get_config_dir();
+    let path = format!("{}/.gotify_app_shelf_config.json", config_dir);
+    let json = serde_json::to_string_pretty(config)
+        .map_err(|e| format!("序列化应用盒窗口配置失败: {}", e))?;
+    std::fs::write(&path, json).map_err(|e| format!("写入应用盒窗口配置失败: {}", e))
+}
+
+fn get_app_display_name(path: &str) -> String {
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(c_path) = std::ffi::CString::new(path) {
+            unsafe {
+                let name_ptr = macos_get_display_name(c_path.as_ptr());
+                if !name_ptr.is_null() {
+                    let name = std::ffi::CStr::from_ptr(name_ptr).to_string_lossy().to_string();
+                    free(name_ptr as *mut std::ffi::c_void);
+                    if !name.trim().is_empty() {
+                        return name;
+                    }
+                }
+            }
+        }
+    }
+
+    let p = std::path::Path::new(path);
+    p.file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or(path)
+        .to_string()
+}
+
+fn get_app_icon_data_url(path: &str) -> String {
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(c_path) = std::ffi::CString::new(path) {
+            let mut out_len: i32 = 0;
+            unsafe {
+                let png_ptr = macos_get_icon_png(c_path.as_ptr(), 128, &mut out_len);
+                if !png_ptr.is_null() && out_len > 0 {
+                    let slice = std::slice::from_raw_parts(png_ptr, out_len as usize);
+                    use base64::Engine;
+                    let b64 = base64::prelude::BASE64_STANDARD.encode(slice);
+                    free(png_ptr as *mut std::ffi::c_void);
+                    return format!("data:image/png;base64,{}", b64);
+                }
+            }
+        }
+    }
+
+    String::new()
+}
+
+pub fn create_app_shelf_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
+    if let Some(existing) = app.get_webview_window("app_shelf") {
+        let _ = existing.show();
+        let _ = existing.unminimize();
+        let _ = existing.set_focus();
+        return Ok(existing);
+    }
+
+    let cfg = load_app_shelf_config_from_file();
+    let width = cfg.window_width.max(200) as f64;
+    let height = cfg.window_height.max(140) as f64;
+
+    let win = tauri::WebviewWindowBuilder::new(
+        app,
+        "app_shelf",
+        tauri::WebviewUrl::App("shelf.html".into()),
+    )
+    .title("桌面应用盒")
+    .inner_size(width, height)
+    .min_inner_size(200.0, 140.0)
+    .resizable(true)
+    .maximizable(false)
+    .fullscreen(false)
+    .decorations(false)
+    .always_on_top(cfg.always_on_top)
+    .transparent(true)
+    .shadow(false)
+    .build()
+    .map_err(|e| format!("创建应用盒窗口失败: {}", e))?;
+
+    if let (Some(x), Some(y)) = (cfg.window_x, cfg.window_y) {
+        let safe_x = if x > 10000 || x < -5000 { 100 } else { x };
+        let safe_y = if y > 10000 || y < -5000 { 100 } else { y };
+        let _ = win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x: safe_x, y: safe_y }));
+    } else {
+        let _ = win.center();
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(ns_win_ptr) = win.ns_window() {
+            if cfg.always_on_top {
+                macos_window::schedule_set_floating(ns_win_ptr as *mut std::ffi::c_void, true);
+            } else {
+                macos_window::schedule_set_desktop_pin(ns_win_ptr as *mut std::ffi::c_void, true);
+            }
+        }
+    }
+
+    Ok(win)
+}
+
+#[tauri::command]
+async fn toggle_app_shelf_window(app: tauri::AppHandle) -> Result<bool, String> {
+    if let Some(window) = app.get_webview_window("app_shelf") {
+        if window.is_visible().unwrap_or(false) {
+            let _ = window.hide();
+            let mut cfg = load_app_shelf_config_from_file();
+            cfg.is_open = false;
+            let _ = save_app_shelf_config_to_file(&cfg);
+            return Ok(false);
+        } else {
+            let _ = window.show();
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+            let mut cfg = load_app_shelf_config_from_file();
+            cfg.is_open = true;
+            let _ = save_app_shelf_config_to_file(&cfg);
+            return Ok(true);
+        }
+    }
+
+    create_app_shelf_window(&app)?;
+    let mut cfg = load_app_shelf_config_from_file();
+    cfg.is_open = true;
+    let _ = save_app_shelf_config_to_file(&cfg);
+    Ok(true)
+}
+
+#[tauri::command]
+fn get_app_shelf_items() -> Result<Vec<AppShelfItem>, String> {
+    Ok(load_app_shelf_items_from_file())
+}
+
+#[tauri::command]
+fn add_apps_to_shelf(paths: Vec<String>) -> Result<Vec<AppShelfItem>, String> {
+    let mut items = load_app_shelf_items_from_file();
+    for raw_path in paths {
+        let path = raw_path.trim().to_string();
+        if path.is_empty() { continue; }
+        let p = std::path::Path::new(&path);
+        if !p.exists() { continue; }
+
+        if items.iter().any(|it| it.path == path) {
+            continue;
+        }
+
+        let name = get_app_display_name(&path);
+        let icon_data = get_app_icon_data_url(&path);
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+        let id = format!("{}_{}", now.as_millis(), items.len());
+
+        items.push(AppShelfItem {
+            id,
+            name,
+            path,
+            icon_data,
+            added_at: now.as_secs(),
+        });
+    }
+
+    save_app_shelf_items_to_file(&items)?;
+    Ok(items)
+}
+
+#[tauri::command]
+fn remove_app_from_shelf(id: String) -> Result<Vec<AppShelfItem>, String> {
+    let mut items = load_app_shelf_items_from_file();
+    items.retain(|it| it.id != id);
+    save_app_shelf_items_to_file(&items)?;
+    Ok(items)
+}
+
+#[tauri::command]
+fn open_app_item(path: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("打开应用失败: {}", e))?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(&["/C", "start", "", &path])
+            .spawn()
+            .map_err(|e| format!("打开应用失败: {}", e))?;
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("打开应用失败: {}", e))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn show_in_finder(path: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .args(&["-R", &path])
+            .spawn()
+            .map_err(|e| format!("在访达中显示失败: {}", e))?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .args(&[format!("/select,{}", path)])
+            .spawn()
+            .map_err(|e| format!("在资源管理器中显示失败: {}", e))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn pick_and_add_app() -> Result<Vec<AppShelfItem>, String> {
+    #[cfg(target_os = "macos")]
+    {
+        unsafe {
+            let picked_ptr = macos_pick_app_file();
+            if !picked_ptr.is_null() {
+                let c_str = std::ffi::CStr::from_ptr(picked_ptr);
+                let path = c_str.to_string_lossy().to_string();
+                free(picked_ptr as *mut std::ffi::c_void);
+                return add_apps_to_shelf(vec![path]);
+            }
+        }
+    }
+    Ok(load_app_shelf_items_from_file())
+}
+
+#[tauri::command]
+fn get_app_shelf_config() -> Result<AppShelfConfig, String> {
+    Ok(load_app_shelf_config_from_file())
+}
+
+#[tauri::command]
+fn save_app_shelf_config(config: AppShelfConfig) -> Result<(), String> {
+    save_app_shelf_config_to_file(&config)
+}
+
+#[tauri::command]
+fn set_shelf_always_on_top(app: tauri::AppHandle, always_on_top: bool) -> Result<bool, String> {
+    if let Some(window) = app.get_webview_window("app_shelf") {
+        let _ = window.set_always_on_top(always_on_top);
+
+        #[cfg(target_os = "macos")]
+        {
+            if let Ok(ns_win_ptr) = window.ns_window() {
+                if always_on_top {
+                    macos_window::schedule_set_floating(ns_win_ptr as *mut std::ffi::c_void, true);
+                } else {
+                    macos_window::schedule_set_desktop_pin(ns_win_ptr as *mut std::ffi::c_void, true);
+                }
+            }
+        }
+
+        let mut cfg = load_app_shelf_config_from_file();
+        cfg.always_on_top = always_on_top;
+        let _ = save_app_shelf_config_to_file(&cfg);
+        return Ok(always_on_top);
+    }
+    Ok(always_on_top)
+}
+
+#[tauri::command]
+async fn set_shelf_opacity(opacity: f64) -> Result<f64, String> {
+    let clamped = opacity.clamp(0.05, 1.0);
+    let mut config = load_app_shelf_config_from_file();
+    config.opacity = clamped;
+    save_app_shelf_config_to_file(&config)?;
+    Ok(clamped)
+}
+
+#[tauri::command]
+async fn set_shelf_mode_opacity(mode: String, opacity: f64) -> Result<f64, String> {
+    let clamped = opacity.clamp(0.05, 1.0);
+    let mut config = load_app_shelf_config_from_file();
+    if mode == "floating" {
+        config.floating_opacity = clamped;
+    } else {
+        config.desktop_opacity = clamped;
+    }
+    config.opacity = clamped;
+    save_app_shelf_config_to_file(&config)?;
     Ok(clamped)
 }
 
