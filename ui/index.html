@@ -1008,30 +1008,70 @@
         let widgetDragStartY = 0;
         const WIDGET_DRAG_THRESHOLD = 4;
 
-        const activateWidgetWindow = () => {
+        // 点击小组件任意区域时，立即将窗口提升至前台并持续保持磨砂半透明状态（至少 6 秒）
+        let activeHoldTimer = null;
+        let isMouseInsideCard = false;
+
+        const setWidgetActiveState = (active) => {
             const card = document.getElementById('widgetCard');
-            if (card) {
+            if (!card) return;
+            if (active) {
                 card.classList.add('is-active', 'is-focused');
+            } else {
+                card.classList.remove('is-active', 'is-focused');
             }
+        };
+
+        const keepActive = (duration = 6000) => {
+            setWidgetActiveState(true);
+            clearTimeout(activeHoldTimer);
+            activeHoldTimer = setTimeout(() => {
+                if (!isMouseInsideCard) {
+                    setWidgetActiveState(false);
+                }
+            }, duration);
+        };
+
+        const activateWidgetWindow = () => {
+            keepActive(6000);
             try {
                 if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
                     window.__TAURI_INTERNALS__.invoke('activate_widget_window').catch(() => {});
                 }
             } catch (_) {}
         };
+
         window.addEventListener('mousedown', activateWidgetWindow, true);
         window.addEventListener('pointerdown', activateWidgetWindow, true);
-        window.addEventListener('blur', () => {
-            const card = document.getElementById('widgetCard');
-            if (card) {
-                card.classList.remove('is-active', 'is-focused');
+
+        // 鼠标移入小组件时保持磨砂
+        window.addEventListener('mouseenter', () => {
+            isMouseInsideCard = true;
+            keepActive(6000);
+        });
+        window.addEventListener('mousemove', () => {
+            if (!isMouseInsideCard) {
+                isMouseInsideCard = true;
             }
         });
+        window.addEventListener('mouseleave', () => {
+            isMouseInsideCard = false;
+            // 鼠标移出后，再保持 6 秒才平滑恢复透明
+            keepActive(6000);
+        });
+
+        // 窗口失焦时，延后 6 秒才平滑恢复平时的透明
+        window.addEventListener('blur', () => {
+            clearTimeout(activeHoldTimer);
+            activeHoldTimer = setTimeout(() => {
+                if (!isMouseInsideCard) {
+                    setWidgetActiveState(false);
+                }
+            }, 6000);
+        });
+
         window.addEventListener('focus', () => {
-            const card = document.getElementById('widgetCard');
-            if (card) {
-                card.classList.add('is-active', 'is-focused');
-            }
+            keepActive(6000);
         });
 
         function onWidgetMouseDown(event) {
