@@ -123,6 +123,14 @@
             border-bottom: 1px solid rgba(255, 255, 255, 0.06);
         }
 
+        .desktop-widget-card.header-hidden .widget-header {
+            display: none !important;
+        }
+
+        .desktop-widget-card.header-hidden .shelf-content {
+            padding: 12px 10px 10px 10px !important;
+        }
+
         [data-theme="light"] .widget-header {
             border-bottom: 1px solid rgba(0, 0, 0, 0.06);
         }
@@ -493,9 +501,9 @@
 
 <body>
     <div class="container">
-        <div class="desktop-widget-card" id="shelfCard" oncontextmenu="onCardContextMenu(event)">
+        <div class="desktop-widget-card" id="shelfCard" oncontextmenu="onCardContextMenu(event)" onmousedown="onCardMouseDown(event)">
             <!-- 头部 -->
-            <div class="widget-header" data-tauri-drag-region onmousedown="onHeaderMouseDown(event)">
+            <div class="widget-header" id="shelfHeader" data-tauri-drag-region onmousedown="onHeaderMouseDown(event)">
                 <div class="widget-status" data-tauri-drag-region>
                     <span>🗂️</span>
                     <span id="shelfTitle">应用盒</span>
@@ -505,6 +513,11 @@
                     <button class="icon-btn" onclick="onAddAppClick(event)" title="添加应用...">➕</button>
                     <button class="icon-btn" id="opacityBtn" onclick="toggleOpacityPopover(event)" title="调节透明度">💧</button>
                     <button class="icon-btn" onclick="toggleTheme(event)" title="切换深/浅主题">🌓</button>
+                    <button class="icon-btn" onclick="toggleHeaderBar(event)" title="隐藏顶部栏 (右键菜单可重新显示)">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="18 15 12 9 6 15"></polyline>
+                        </svg>
+                    </button>
                     <button class="icon-btn close-btn" onclick="closeShelf(event)" title="隐藏应用盒">✕</button>
                 </div>
             </div>
@@ -563,6 +576,9 @@
                 <div class="context-menu-item" onclick="toggleTheme(event)">
                     <span>🌓</span> <span>切换深/浅主题</span>
                 </div>
+                <div class="context-menu-item" onclick="toggleHeaderBar(event)">
+                    <span id="menuHeaderIcon">🙈</span> <span id="menuHeaderText">隐藏顶部栏</span>
+                </div>
                 <div class="context-menu-item" onclick="onAddAppClick(event)">
                     <span>➕</span> <span>添加应用程序...</span>
                 </div>
@@ -585,12 +601,21 @@
         let isAlwaysOnTop = false;
         let floatingOpacity = 0.92;
         let desktopOpacity = 0.35;
-        let currentOpacity = 0.35;
         let activeContextItemId = null;
         let activeContextItemPath = null;
+        let isHeaderHidden = false;
 
         const invoke = (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke) ?
             window.__TAURI_INTERNALS__.invoke : async () => {};
+
+        // 点击小组件任意区域时，立即将窗口提升至前台（避免被其他普通窗口遮挡）
+        window.addEventListener('mousedown', () => {
+            try {
+                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                    window.__TAURI_INTERNALS__.invoke('activate_widget_window').catch(() => {});
+                }
+            } catch (_) {}
+        }, true);
 
         // 初始化
         document.addEventListener('DOMContentLoaded', async () => {
@@ -611,6 +636,11 @@
                     updatePinUI(isAlwaysOnTop);
                     const initOp = isAlwaysOnTop ? floatingOpacity : desktopOpacity;
                     setShelfOpacity(initOp, false, false);
+
+                    if (typeof cfg.hide_header === 'boolean') {
+                        isHeaderHidden = cfg.hide_header;
+                        applyHeaderVisibility(isHeaderHidden);
+                    }
                 }
             } catch (e) {
                 console.warn('获取应用盒配置失败:', e);
@@ -757,7 +787,23 @@
             });
         }
 
-        // 拖拽窗口移动
+        // 拖拽窗口移动：在整个卡片空白区域均可拖动（即使顶部栏隐藏也能随意拖拽）
+        function onCardMouseDown(event) {
+            if (event.button !== 0) return;
+            const target = event.target;
+            // 排除应用项自身点击、图标按钮、右键菜单与透明度弹窗
+            if (target.closest('.app-item') ||
+                target.closest('.icon-btn') ||
+                target.closest('.widget-opacity-popover') ||
+                target.closest('.context-menu')) {
+                return;
+            }
+
+            if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                window.__TAURI_INTERNALS__.invoke('start_dragging_window').catch(() => {});
+            }
+        }
+
         function onHeaderMouseDown(event) {
             if (event.button !== 0) return;
             const target = event.target;
@@ -765,6 +811,36 @@
 
             if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
                 window.__TAURI_INTERNALS__.invoke('start_dragging_window').catch(() => {});
+            }
+        }
+
+        // 隐藏/显示顶部栏切换
+        function toggleHeaderBar(event) {
+            if (event) {
+                if (typeof event.preventDefault === 'function') event.preventDefault();
+                if (typeof event.stopPropagation === 'function') event.stopPropagation();
+            }
+            closeContextMenu();
+            isHeaderHidden = !isHeaderHidden;
+            applyHeaderVisibility(isHeaderHidden);
+            if (typeof invoke === 'function') {
+                invoke('set_app_shelf_hide_header', { hide: isHeaderHidden }).catch(() => {});
+            }
+        }
+
+        function applyHeaderVisibility(hidden) {
+            const card = document.getElementById('shelfCard');
+            const menuIcon = document.getElementById('menuHeaderIcon');
+            const menuText = document.getElementById('menuHeaderText');
+
+            if (hidden) {
+                if (card) card.classList.add('header-hidden');
+                if (menuIcon) menuIcon.textContent = '👁️';
+                if (menuText) menuText.textContent = '显示顶部栏';
+            } else {
+                if (card) card.classList.remove('header-hidden');
+                if (menuIcon) menuIcon.textContent = '🙈';
+                if (menuText) menuText.textContent = '隐藏顶部栏';
             }
         }
 

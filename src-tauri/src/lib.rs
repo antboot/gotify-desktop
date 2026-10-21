@@ -117,6 +117,10 @@ mod macos_window {
     struct FloatCtx { ns_window: *mut c_void, enable: bool }
     unsafe impl Send for FloatCtx {}
 
+    unsafe extern "C" fn yes_imp(_this: *mut c_void, _cmd: *mut c_void) -> bool {
+        true
+    }
+
     unsafe extern "C" fn do_set_floating(ctx: *mut c_void) {
         let boxed = Box::from_raw(ctx as *mut FloatCtx);
         let win = boxed.ns_window;
@@ -143,6 +147,20 @@ mod macos_window {
                 if !m.is_null() {
                     method_setImplementation(m, imp_fn);
                 }
+            }
+
+            // 允许无边框小组件成为 Key Window / Main Window，确保点击与交互顺畅
+            let key_sel = sel_registerName(b"canBecomeKeyWindow\0".as_ptr() as _);
+            let main_sel = sel_registerName(b"canBecomeMainWindow\0".as_ptr() as _);
+            let bool_types = b"c@:\0".as_ptr() as *const c_char;
+            let yes_fn: unsafe extern "C" fn() = std::mem::transmute(yes_imp as *const ());
+            if !class_addMethod(cls, key_sel, yes_fn, bool_types) {
+                let m = class_getInstanceMethod(cls, key_sel);
+                if !m.is_null() { method_setImplementation(m, yes_fn); }
+            }
+            if !class_addMethod(cls, main_sel, yes_fn, bool_types) {
+                let m = class_getInstanceMethod(cls, main_sel);
+                if !m.is_null() { method_setImplementation(m, yes_fn); }
             }
 
             let shadow_sel = sel_registerName(b"setHasShadow:\0".as_ptr() as _);
@@ -235,6 +253,20 @@ mod macos_window {
                 if !m.is_null() {
                     method_setImplementation(m, imp_fn);
                 }
+            }
+
+            // 允许无边框小组件成为 Key Window / Main Window，确保点击与交互顺畅
+            let key_sel = sel_registerName(b"canBecomeKeyWindow\0".as_ptr() as _);
+            let main_sel = sel_registerName(b"canBecomeMainWindow\0".as_ptr() as _);
+            let bool_types = b"c@:\0".as_ptr() as *const c_char;
+            let yes_fn: unsafe extern "C" fn() = std::mem::transmute(yes_imp as *const ());
+            if !class_addMethod(cls, key_sel, yes_fn, bool_types) {
+                let m = class_getInstanceMethod(cls, key_sel);
+                if !m.is_null() { method_setImplementation(m, yes_fn); }
+            }
+            if !class_addMethod(cls, main_sel, yes_fn, bool_types) {
+                let m = class_getInstanceMethod(cls, main_sel);
+                if !m.is_null() { method_setImplementation(m, yes_fn); }
             }
 
             // 消除 macOS 窗口四角黑色直角系统阴影与背景
@@ -336,19 +368,65 @@ mod macos_window {
         }
     }
 
-    unsafe extern "C" fn do_order_back(ctx: *mut c_void) {
+
+    unsafe extern "C" fn do_elevate_to_front(ctx: *mut c_void) {
         let win = ctx;
         if win.is_null() { return; }
+
+        let level_sel = sel_registerName(b"setLevel:\0".as_ptr() as _);
+        // 临时提升层级到 3 (NSFloatingWindowLevel)，确保立即越过任何遮挡的常规应用窗口
+        msg_isize(win, level_sel, 3);
+
+        let order_front_sel = sel_registerName(b"orderFrontRegardless\0".as_ptr() as _);
+        let f_front: unsafe extern "C" fn(*mut c_void, *mut c_void) =
+            std::mem::transmute(objc_msgSend as *const ());
+        f_front(win, order_front_sel);
+
+        let make_key_sel = sel_registerName(b"makeKeyAndOrderFront:\0".as_ptr() as _);
+        let f_key: unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) =
+            std::mem::transmute(objc_msgSend as *const ());
+        f_key(win, make_key_sel, std::ptr::null_mut());
+
+        let ns_app_cls = objc_getClass(b"NSApplication\0".as_ptr() as _);
+        if !ns_app_cls.is_null() {
+            let shared_sel = sel_registerName(b"sharedApplication\0".as_ptr() as _);
+            let f_shared: unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void =
+                std::mem::transmute(objc_msgSend as *const ());
+            let app = f_shared(ns_app_cls, shared_sel);
+            if !app.is_null() {
+                let act_sel = sel_registerName(b"activateIgnoringOtherApps:\0".as_ptr() as _);
+                msg_usize(app, act_sel, 1);
+            }
+        }
+    }
+
+    /// 当小组件被点击获得焦点时，临时提升到最前台让用户交互
+    pub fn schedule_elevate_to_front(ns_window: *mut c_void) {
+        if ns_window.is_null() { return; }
+        unsafe {
+            dispatch_async_f(&_dispatch_main_q, ns_window, do_elevate_to_front);
+        }
+    }
+
+    unsafe extern "C" fn do_sink_to_desktop(ctx: *mut c_void) {
+        let win = ctx;
+        if win.is_null() { return; }
+
+        let level_sel = sel_registerName(b"setLevel:\0".as_ptr() as _);
+        // 恢复沉降到桌面 -1 层级 (处于所有应用与台前调度下方)
+        msg_isize(win, level_sel, -1);
+
         let order_back_sel = sel_registerName(b"orderBack:\0".as_ptr() as _);
         let f_order: unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) =
             std::mem::transmute(objc_msgSend as *const ());
         f_order(win, order_back_sel, std::ptr::null_mut());
     }
 
-    pub fn schedule_order_back(ns_window: *mut c_void) {
+    /// 当小组件失去焦点时，恢复沉降回桌面底层
+    pub fn schedule_sink_to_desktop(ns_window: *mut c_void) {
         if ns_window.is_null() { return; }
         unsafe {
-            dispatch_async_f(&_dispatch_main_q, ns_window, do_order_back);
+            dispatch_async_f(&_dispatch_main_q, ns_window, do_sink_to_desktop);
         }
     }
 
@@ -594,6 +672,31 @@ mod windows_window {
                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
                 );
             }
+        }
+    }
+
+    /// 当小组件被点击获得焦点时，临时提升层级到顶层让用户交互
+    pub fn bring_to_front(hwnd: isize) {
+        if hwnd == 0 {
+            return;
+        }
+        const HWND_TOP: isize = 0;
+        const SWP_NOSIZE: u32 = 0x0001;
+        const SWP_NOMOVE: u32 = 0x0002;
+        const SWP_SHOWWINDOW: u32 = 0x0040;
+        unsafe {
+            if IsWindow(hwnd) == 0 {
+                return;
+            }
+            SetWindowPos(
+                hwnd,
+                HWND_TOP,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
+            );
         }
     }
 }
@@ -1741,14 +1844,35 @@ pub fn run() {
                 }
             }
             tauri::WindowEvent::Focused(focused) => {
-                // 小组件失去焦点时，若非悬浮置顶，则自动沉到底层桌面，不遮挡正在操作的应用程序
-                if window.label() == "main" && !focused {
-                    let always_on_top = get_window_always_on_top(window.app_handle().clone());
+                if *focused {
+                    // 当桌面小组件被点击获得焦点时，临时提升层级到前台 (Level 3)，让用户能够看清并无阻碍操作
+                    #[cfg(target_os = "macos")]
+                    {
+                        if let Ok(ns_win) = window.ns_window() {
+                            macos_window::schedule_elevate_to_front(ns_win as *mut std::ffi::c_void);
+                        }
+                    }
+                    #[cfg(target_os = "windows")]
+                    {
+                        if let Ok(hwnd) = window.hwnd() {
+                            windows_window::bring_to_front(hwnd.0 as isize);
+                        }
+                    }
+                } else {
+                    // 小组件失去焦点时，若非悬浮置顶，则自动沉降回底层桌面，不遮挡正在操作的应用程序
+                    let always_on_top = if window.label() == "main" {
+                        get_window_always_on_top(window.app_handle().clone())
+                    } else if window.label() == "app_shelf" {
+                        load_app_shelf_config_from_file().always_on_top
+                    } else {
+                        false
+                    };
+
                     if !always_on_top {
                         #[cfg(target_os = "macos")]
                         {
                             if let Ok(ns_win) = window.ns_window() {
-                                macos_window::schedule_order_back(ns_win as *mut std::ffi::c_void);
+                                macos_window::schedule_sink_to_desktop(ns_win as *mut std::ffi::c_void);
                             }
                         }
 
@@ -1756,16 +1880,6 @@ pub fn run() {
                         {
                             if let Ok(hwnd) = window.hwnd() {
                                 windows_window::set_desktop_pin(hwnd.0 as isize, true);
-                            }
-                        }
-                    }
-                } else if window.label() == "app_shelf" && !focused {
-                    let cfg = load_app_shelf_config_from_file();
-                    if !cfg.always_on_top {
-                        #[cfg(target_os = "macos")]
-                        {
-                            if let Ok(ns_win) = window.ns_window() {
-                                macos_window::schedule_order_back(ns_win as *mut std::ffi::c_void);
                             }
                         }
                     }
@@ -1900,6 +2014,8 @@ pub fn run() {
             set_shelf_always_on_top,
             set_shelf_opacity,
             set_shelf_mode_opacity,
+            activate_widget_window,
+            set_app_shelf_hide_header,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -2185,6 +2301,24 @@ fn start_dragging_window(window: tauri::WebviewWindow) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn activate_widget_window(window: tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(ns_win) = window.ns_window() {
+            macos_window::schedule_elevate_to_front(ns_win as *mut std::ffi::c_void);
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(hwnd) = window.hwnd() {
+            windows_window::bring_to_front(hwnd.0 as isize);
+        }
+    }
+    let _ = window.set_focus();
+    Ok(())
+}
+
+#[tauri::command]
 fn get_widget_config() -> WidgetConfig {
     load_widget_config_from_file()
 }
@@ -2287,6 +2421,8 @@ pub struct AppShelfConfig {
     pub desktop_opacity: f64,
     pub always_on_top: bool,
     pub is_open: bool,
+    #[serde(default)]
+    pub hide_header: bool,
 }
 
 impl Default for AppShelfConfig {
@@ -2301,6 +2437,7 @@ impl Default for AppShelfConfig {
             desktop_opacity: 0.35,
             always_on_top: false,
             is_open: true,
+            hide_header: false,
         }
     }
 }
@@ -2628,5 +2765,13 @@ async fn set_shelf_mode_opacity(mode: String, opacity: f64) -> Result<f64, Strin
     config.opacity = clamped;
     save_app_shelf_config_to_file(&config)?;
     Ok(clamped)
+}
+
+#[tauri::command]
+fn set_app_shelf_hide_header(hide: bool) -> Result<bool, String> {
+    let mut cfg = load_app_shelf_config_from_file();
+    cfg.hide_header = hide;
+    save_app_shelf_config_to_file(&cfg)?;
+    Ok(hide)
 }
 

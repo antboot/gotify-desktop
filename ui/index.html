@@ -1010,6 +1010,15 @@
             }
         }
 
+        // 点击小组件任意区域时，立即将窗口提升至前台（避免被其他普通窗口遮挡）
+        window.addEventListener('mousedown', () => {
+            try {
+                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                    window.__TAURI_INTERNALS__.invoke('activate_widget_window').catch(() => {});
+                }
+            } catch (_) {}
+        }, true);
+
         // 透明度管理
         function setWidgetOpacity(opacity, persist = true, animate = false) {
             const defaultVal = isWindowAlwaysOnTop ? 0.92 : 0.45;
