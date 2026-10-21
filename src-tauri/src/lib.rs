@@ -762,6 +762,7 @@ mod windows_window {
     }
 }
 
+static FOCUS_EPOCH: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 struct GotifyMessage {
@@ -1905,6 +1906,7 @@ pub fn run() {
                 }
             }
             tauri::WindowEvent::Focused(focused) => {
+                let current_epoch = FOCUS_EPOCH.fetch_add(1, Ordering::SeqCst) + 1;
                 if *focused {
                     // 当桌面小组件被点击获得焦点时，临时提升层级到前台 (Level 3)，让用户能够看清并无阻碍操作
                     #[cfg(target_os = "macos")]
@@ -1920,7 +1922,8 @@ pub fn run() {
                         }
                     }
                 } else {
-                    // 小组件失去焦点时，若非悬浮置顶，则自动沉降回底层桌面，不遮挡正在操作的应用程序
+                    // 小组件失去焦点时，延迟 6 秒才沉降回底层桌面，确保用户点击后有充足的 5~6 秒时间查看并交互
+                    let win_clone = window.clone();
                     let always_on_top = if window.label() == "main" {
                         get_window_always_on_top(window.app_handle().clone())
                     } else if window.label() == "app_shelf" {
@@ -1930,19 +1933,32 @@ pub fn run() {
                     };
 
                     if !always_on_top {
-                        #[cfg(target_os = "macos")]
-                        {
-                            if let Ok(ns_win) = window.ns_window() {
-                                macos_window::schedule_sink_to_desktop(ns_win as *mut std::ffi::c_void);
+                        tauri::async_runtime::spawn(async move {
+                            tokio::time::sleep(tokio::time::Duration::from_millis(6000)).await;
+                            // 如果 6 秒内有任何新的焦点或激活事件发生，立即取消本次沉降
+                            if FOCUS_EPOCH.load(Ordering::SeqCst) != current_epoch {
+                                return;
                             }
-                        }
+                            // 如果 6 秒后窗口依然具有焦点，不沉降
+                            if let Ok(is_focused) = win_clone.is_focused() {
+                                if is_focused {
+                                    return;
+                                }
+                            }
+                            #[cfg(target_os = "macos")]
+                            {
+                                if let Ok(ns_win) = win_clone.ns_window() {
+                                    macos_window::schedule_sink_to_desktop(ns_win as *mut std::ffi::c_void);
+                                }
+                            }
 
-                        #[cfg(target_os = "windows")]
-                        {
-                            if let Ok(hwnd) = window.hwnd() {
-                                windows_window::set_desktop_pin(hwnd.0 as isize, true);
+                            #[cfg(target_os = "windows")]
+                            {
+                                if let Ok(hwnd) = win_clone.hwnd() {
+                                    windows_window::set_desktop_pin(hwnd.0 as isize, true);
+                                }
                             }
-                        }
+                        });
                     }
                 }
             }
@@ -2358,6 +2374,7 @@ fn toggle_window_always_on_top(app: tauri::AppHandle) -> Result<bool, String> {
 
 #[tauri::command]
 fn start_dragging_window(window: tauri::WebviewWindow) -> Result<(), String> {
+    FOCUS_EPOCH.fetch_add(1, Ordering::SeqCst);
     #[cfg(target_os = "macos")]
     {
         if let Ok(ns_win) = window.ns_window() {
@@ -2387,6 +2404,7 @@ fn start_dragging_window(window: tauri::WebviewWindow) -> Result<(), String> {
 
 #[tauri::command]
 fn activate_widget_window(window: tauri::WebviewWindow) -> Result<(), String> {
+    FOCUS_EPOCH.fetch_add(1, Ordering::SeqCst);
     #[cfg(target_os = "macos")]
     {
         if let Ok(ns_win) = window.ns_window() {
