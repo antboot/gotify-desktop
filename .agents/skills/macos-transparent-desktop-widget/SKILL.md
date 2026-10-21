@@ -192,18 +192,26 @@ Desktop widgets need distinct visual weights depending on their mode:
     width: 100%;
     height: 100%;
     border-radius: 16px !important;
-    clip-path: inset(0 round 16px) !important;
-    -webkit-clip-path: inset(0 round 16px) !important;
+    overflow: hidden !important;
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+    will-change: transform, backdrop-filter;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
     background: rgba(22, 28, 40, var(--widget-opacity, 0.45)) !important;
     backdrop-filter: blur(32px) !important;
     -webkit-backdrop-filter: blur(32px) !important;
     border: 1px solid rgba(255, 255, 255, 0.16) !important;
-    transition: background 0.35s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.35s ease, box-shadow 0.35s ease;
     /* Inset glow only, NO outer box-shadow to prevent black halo clippings */
     box-shadow:
         inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.28),
         inset 0 -1px 1px 0 rgba(0, 0, 0, 0.25),
         inset 0 0 0 0.5px rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Enable smooth transition only during explicit state changes */
+.desktop-widget-card.is-transitioning {
+    transition: background 0.35s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.35s ease, box-shadow 0.35s ease;
 }
 
 [data-theme="light"] .desktop-widget-card {
@@ -216,9 +224,12 @@ Desktop widgets need distinct visual weights depending on their mode:
 }
 ```
 
-### 5.2 Avoiding WebKit Color Flashes
-1. **Never use `saturate(...)` or `brightness(...)`** in `backdrop-filter`. WebKit dims them when inactive.
-2. Use constant `blur(32px)` with alpha-based RGB background colors.
+### 5.2 Avoiding WebKit Color Flashes & Compositor Drops
+1. **Never use `clip-path` on elements with `backdrop-filter`**: WebKit breaks `CABackdropLayer` GPU compositing and falls back to an unstable masking FBO, causing 1-frame black/dark background flashes during DOM repaints. Use `border-radius` + `overflow: hidden` instead.
+2. **Never use `saturate(...)` or `brightness(...)`** in `backdrop-filter`. WebKit dims them when inactive.
+3. **Pin GPU Compositing Layer**: Add `will-change: transform, backdrop-filter;` and `-webkit-backface-visibility: hidden;` to keep the backdrop buffer in VRAM.
+4. **Isolate `transition: background`**: Do not keep `transition: background` enabled permanently on the card; only apply it (via an `.is-transitioning` class) when user explicitly toggles modes or adjusts the slider, preventing 16ms repaint ticks from stretching into visible 350ms dark flashes.
+5. **Zero DOM-Churn on Timers**: When empty or unchanged, never re-assign `innerHTML` or rewrite DOM attributes inside periodic timers.
 
 ---
 

@@ -72,21 +72,22 @@
             width: 100%;
             height: 100%;
             border-radius: 16px !important;
-            clip-path: inset(0 round 16px) !important;
-            -webkit-clip-path: inset(0 round 16px) !important;
+            overflow: hidden !important;
             transform: translateZ(0);
+            -webkit-transform: translateZ(0);
+            will-change: transform, backdrop-filter;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
             background: rgba(22, 28, 40, var(--widget-opacity, 0.45)) !important;
             backdrop-filter: blur(32px) !important;
             -webkit-backdrop-filter: blur(32px) !important;
             border: 1px solid rgba(255, 255, 255, 0.16) !important;
-            transition: background 0.35s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.35s ease, box-shadow 0.35s ease;
             box-shadow:
                 inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.28),
                 inset 0 -1px 1px 0 rgba(0, 0, 0, 0.25),
                 inset 0 0 0 0.5px rgba(255, 255, 255, 0.08) !important;
             display: flex !important;
             flex-direction: column !important;
-            overflow: hidden !important;
             box-sizing: border-box !important;
             color: #f3f4f6 !important;
             user-select: none;
@@ -95,12 +96,16 @@
             cursor: grab;
         }
 
+        /* 仅在主动切换形态或调节透明度时启用平滑过渡，避免常态背景刷新触发 0.35s 闪屏 */
+        .desktop-widget-card.is-transitioning {
+            transition: background 0.35s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.35s ease, box-shadow 0.35s ease;
+        }
+
         [data-theme="light"] .desktop-widget-card {
             background: rgba(245, 247, 252, var(--widget-opacity, 0.45)) !important;
             backdrop-filter: blur(32px) !important;
             -webkit-backdrop-filter: blur(32px) !important;
             border: 1px solid rgba(255, 255, 255, 0.65) !important;
-            transition: background 0.35s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.35s ease, box-shadow 0.35s ease;
             box-shadow:
                 inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.85),
                 inset 0 -1px 1px 0 rgba(0, 0, 0, 0.05),
@@ -915,9 +920,9 @@
                 contextPinIcon.textContent = isWindowAlwaysOnTop ? '🖥️' : '📌';
             }
 
-            // 切换前台置顶与底层桌面形态时，应用对应透明度
+            // 切换前台置顶与底层桌面形态时，应用对应透明度（带平滑过渡）
             const targetOpacity = isWindowAlwaysOnTop ? floatingOpacity : desktopOpacity;
-            setWidgetOpacity(targetOpacity, false);
+            setWidgetOpacity(targetOpacity, false, true);
         }
 
         async function initWindowAlwaysOnTop() {
@@ -986,7 +991,7 @@
         }
 
         // 透明度管理
-        function setWidgetOpacity(opacity, persist = true) {
+        function setWidgetOpacity(opacity, persist = true, animate = false) {
             const defaultVal = isWindowAlwaysOnTop ? 0.92 : 0.45;
             const val = Math.max(0.05, Math.min(1.0, parseFloat(opacity) || defaultVal));
             currentWidgetOpacity = val;
@@ -995,6 +1000,18 @@
             } else {
                 desktopOpacity = val;
             }
+
+            if (animate) {
+                const card = document.querySelector('.desktop-widget-card');
+                if (card) {
+                    card.classList.add('is-transitioning');
+                    clearTimeout(card._transTimer);
+                    card._transTimer = setTimeout(() => {
+                        card.classList.remove('is-transitioning');
+                    }, 400);
+                }
+            }
+
             document.documentElement.style.setProperty('--widget-opacity', val.toString());
 
             const percent = Math.round(val * 100);
@@ -1037,16 +1054,16 @@
 
         function onOpacitySliderInput(event) {
             const percent = parseInt(event.target.value, 10) || 70;
-            setWidgetOpacity(percent / 100, false);
+            setWidgetOpacity(percent / 100, false, false);
         }
 
         function onOpacitySliderChange(event) {
             const percent = parseInt(event.target.value, 10) || 70;
-            setWidgetOpacity(percent / 100, true);
+            setWidgetOpacity(percent / 100, true, false);
         }
 
         function applyOpacityPreset(val) {
-            setWidgetOpacity(val, true);
+            setWidgetOpacity(val, true, true);
         }
 
         function cycleWidgetOpacity(event) {
@@ -1062,7 +1079,7 @@
                     break;
                 }
             }
-            setWidgetOpacity(levels[nextIndex], true);
+            setWidgetOpacity(levels[nextIndex], true, true);
         }
 
         window.addEventListener('mousedown', (e) => {
@@ -1196,6 +1213,10 @@
             }
 
             if (typeof notifications === 'undefined' || !notifications || notifications.length === 0) {
+                if (listEl.querySelector('.widget-empty')) {
+                    // 若已处于暂无通知状态，无需重复销毁重建 DOM，避免触发 WebKit 重排与合成层刷新
+                    return;
+                }
                 listEl.innerHTML = `
                     <div class="widget-empty" onmousedown="onWidgetMouseDown(event)">
                         <div class="widget-empty-icon-wrap" onmousedown="onWidgetMouseDown(event)">
@@ -1608,7 +1629,10 @@
             return html;
         }
 
+        let lastConnectionStatus = null;
         function updateConnectionStatus(status) {
+            if (status === lastConnectionStatus) return;
+            lastConnectionStatus = status;
             const widgetDot = document.getElementById('widgetStatusDot');
             if (widgetDot) {
                 if (status === 'connected') {
@@ -1726,7 +1750,22 @@
         }
 
         setInterval(() => {
-            renderWidgetNotifications();
+            if (notifications && notifications.length > 0) {
+                // 仅就地更新时间标签，避免全量重建 DOM 引发显卡合成层刷新
+                document.querySelectorAll('.widget-item').forEach(itemEl => {
+                    const id = parseInt(itemEl.dataset.id, 10);
+                    const notif = notifications.find(n => n.id === id);
+                    if (notif) {
+                        const timeEl = itemEl.querySelector('.widget-item-time');
+                        if (timeEl) {
+                            const newTime = formatTime(notif.date);
+                            if (timeEl.textContent !== newTime) {
+                                timeEl.textContent = newTime;
+                            }
+                        }
+                    }
+                });
+            }
         }, 60000);
 
         async function reconnectWebSocket() {
