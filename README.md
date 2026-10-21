@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <b>精雕细琢的下一代 Gotify 桌面通知客户端 · 深度融合 macOS 原生液态玻璃桌面小组件</b>
+  <b>精雕细琢的下一代 Gotify 桌面通知客户端 · 深度融合 Apple 原生液态玻璃桌面小组件</b>
 </p>
 
 <p align="center">
@@ -33,24 +33,30 @@
 
 ## ✨ 核心特性 (Features)
 
-- 🪟 **沉浸式桌面小组件模式 (Desktop Widget)**
-  - **原生沉底**：基于 macOS Cocoa 底层窗口优化，小组件始终安静沉在桌面，绝不遮挡 **台前调度（Stage Manager）** 的卡片与应用窗口。
+- 🪟 **专注纯粹的桌面小组件架构 (Pure Desktop Widget)**
+  - **原生沉底**：基于 macOS Cocoa 底层窗口优化（Level `-1`），小组件始终安静沉在壁纸上，绝不遮挡 **台前调度（Stage Manager）** 的缩略图与应用窗口。
   - **Apple 原生液态玻璃美学**：Squircle 连续大圆角、精细内发光浮雕、多级高斯毛玻璃效果，完美契合 macOS 现代设计规范。
-  - **无级透明度调节**：内置 20%~95% 玻璃透明度调节滑块与快捷预设，随心搭配你的桌面壁纸。
-  - **随心摆放**：支持自由拖拽小组件到桌面任意角落，自动记忆窗口坐标与状态。
+  - **随心摆放**：支持自由拖拽小组件到桌面任意角落，自动防抖记忆窗口坐标与状态。
+
+- 💧 **置顶前台与常驻桌面双形态 · 智能双透明度系统**
+  - **悬浮置顶 (前台)**：自动切换至 **`0.92` (92%)** 高对比度实感透明度，文字与通知内容清晰锐利，Win32 / Cocoa 级别绝对置顶，绝不被任何其他应用遮挡。
+  - **常驻桌面 (底层)**：自动切换至 **`0.45` (45%)** 高通透度环境玻璃，自然融入桌面壁纸。
+  - **丝滑呼吸过渡**：切换形态时背景透明度平滑过渡，并在调节透明度时独立持久化保存两套参数。
+
+- 🍎 **纯后台常驻守护 · 默认不占 Dock 栏与任务栏**
+  - **原生后台体验**：默认作为后台辅助服务（`Accessory` 模式）运行，仅在 macOS 顶部菜单栏与 Windows 系统托盘常驻，还你清爽干净的 Dock 栏。
+  - **托盘快捷开关**：托盘右键菜单提供 `🍎 显示/隐藏 Dock 图标` 与 `🪟 显示/隐藏任务栏图标` 快捷开关，并与设置窗口实时双向毫秒级同步。
+
+- 👁️ **全局无焦鼠标滑过已阅 (Global Unfocused Hover)**
+  - 针对后台挂件窗口无系统焦点的痛点，原生捕获光标轨迹，鼠标掠过通知卡片自动激发流光动效并在移出后平滑标记已阅，**无需点击激活窗口即可划过即读**。
 
 - 🔔 **强大的 Gotify 实时通知**
   - **低延迟长连接**：基于 WebSocket 的实时消息通道，内置智能断线重连机制。
   - **系统原生通知**：支持各平台原生系统级横幅与声音提醒。
   - **富媒体与 Markdown 解析**：完美支持 Markdown 排版、图片快照直显、点击链接跳转。
 
-- 🎨 **细节满满的桌面端体验**
-  - **系统级深浅色主题自适应**：跟随系统明暗偏好秒级无缝切换。
-  - **系统托盘常驻**：后台静默守护，支持开机启动与快捷呼出。
-  - **安全隐私**：配置信息本地存储，支持环境变量配置与服务器 Token 隔离。
-
 - ⚡ **极致轻量高效**
-  - 基于 **Rust + Tauri 2** 构建，安装包轻巧、内存占用极低（日常运行内存 < 40MB），告别臃肿的 Electron。
+  - 基于 **Rust + Tauri 2** 构建，安装包仅数兆大小、内存占用极低（日常运行内存 < 40MB），告别臃肿的 Electron。
 
 ---
 
@@ -59,7 +65,7 @@
 ### 方式一：直接下载安装包（推荐）
 前往 [Releases 页面](https://github.com/antboot/gotify-desktop/releases/latest) 下载适用于你系统的预编译安装包：
 - **macOS (Apple Silicon & Intel)**：下载 `.dmg` 文件，拖入 `Applications` 即可使用。
-- **Windows**：下载 `.msi` 或绿色版安装包。
+- **Windows**：下载 `Gotify_Notifier_*_x64-setup.exe`（安装引导版）、`.msi`（企业安装版）或 `.zip`（便携免安装绿色版）。
 
 ### 方式二：源码构建
 
@@ -70,14 +76,11 @@
 git clone https://github.com/antboot/gotify-desktop.git
 cd gotify-desktop
 
-# 2. 安装 Tauri CLI (若尚未安装)
-cargo install tauri-cli
+# 2. 运行开发模式
+npx @tauri-apps/cli dev
 
-# 3. 运行开发模式
-cargo tauri dev
-
-# 4. 构建正式发行版
-cargo tauri build
+# 3. 构建正式发行版
+npx @tauri-apps/cli build
 ```
 
 构建生成的安装包位于 `src-tauri/target/release/bundle/` 目录下。
@@ -86,7 +89,7 @@ cargo tauri build
 
 ## 🛠️ 配置说明 (Configuration)
 
-首次打开应用后，点击右上角设置图标（或在小组件中还原主窗口）：
+首次打开应用后，右键点击小组件（或系统托盘图标）选择“设置”：
 
 1. **服务器地址**：例如 `http://192.168.1.100:8080` 或 `https://gotify.example.com`
 2. **客户端 Token**：在 Gotify Web 端创建 Client 并获取生成的 Token
@@ -97,6 +100,13 @@ cargo tauri build
 export GOTIFY_SERVER_URL="https://gotify.example.com"
 export GOTIFY_CLIENT_TOKEN="your_token_here"
 ```
+
+---
+
+## 📚 延伸技术指南与 Skills
+- [桌面小组件架构设计与 AI 提示词指南](DESKTOP_WIDGET_IMPLEMENTATION_GUIDE.md)
+- [macOS 桌面小组件工程 Skills](.agents/skills/macos-transparent-desktop-widget/SKILL.md)
+- [GitHub Actions 多平台自动编译指南](GITHUB_ACTIONS_GUIDE.md)
 
 ---
 
