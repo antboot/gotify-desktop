@@ -55,6 +55,100 @@ mod macos_window {
         fn objc_msgSend();
     }
 
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGWindowListCopyWindowInfo(option: u32, relative_to_window: u32) -> *mut c_void;
+        fn CGMainDisplayID() -> u32;
+        fn CGDisplayBounds(display: u32) -> CGRect;
+        fn CGRectMakeWithDictionaryRepresentation(dict: *mut c_void, rect: *mut CGRect) -> u8;
+        static kCGWindowNumber: *const c_void;
+        static kCGWindowBounds: *const c_void;
+        static kCGWindowAlpha: *const c_void;
+        static kCGWindowLayer: *const c_void;
+    }
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        fn CFArrayGetCount(array: *mut c_void) -> isize;
+        fn CFArrayGetValueAtIndex(array: *mut c_void, index: isize) -> *mut c_void;
+        fn CFDictionaryGetValue(dict: *mut c_void, key: *const c_void) -> *mut c_void;
+        fn CFNumberGetValue(number: *mut c_void, number_type: isize, value_ptr: *mut c_void) -> u8;
+        fn CFRelease(cf: *mut c_void);
+    }
+
+    /// 判断该窗口在给定屏幕坐标点（CoreGraphics 全局坐标，主屏左上角为原点、y 向下）
+    /// 是否就是视觉上最上层的窗口。窗口被其他应用窗口遮挡时返回 false，
+    /// 避免"鼠标在浏览器上、但坐标落在小组件窗口范围内"时误判为悬停。
+    unsafe fn is_window_topmost_at_point(ns_window: *mut c_void, point: CGPoint) -> bool {
+        let num_sel = sel_registerName(b"windowNumber\0".as_ptr() as _);
+        let f_num: unsafe extern "C" fn(*mut c_void, *mut c_void) -> isize =
+            std::mem::transmute(objc_msgSend as *const ());
+        let our_num = f_num(ns_window, num_sel) as i64;
+
+        // kCGWindowListOptionOnScreenOnly = 1：返回当前屏幕上所有可见窗口，按前到后排序
+        let list = CGWindowListCopyWindowInfo(1, 0);
+        if list.is_null() {
+            // 查询失败时不阻断悬停判定（保持旧行为）
+            return true;
+        }
+
+        let mut topmost_is_ours = false;
+        let count = CFArrayGetCount(list);
+        for i in 0..count {
+            let dict = CFArrayGetValueAtIndex(list, i);
+            if dict.is_null() { continue; }
+
+            // 完全透明的窗口不参与遮挡判断
+            let alpha_ptr = CFDictionaryGetValue(dict, kCGWindowAlpha);
+            if !alpha_ptr.is_null() {
+                let mut alpha: f64 = 1.0;
+                if CFNumberGetValue(alpha_ptr, 6 /* kCFNumberFloat64Type */, &mut alpha as *mut f64 as *mut c_void) != 0
+                    && alpha <= 0.001
+                {
+                    continue;
+                }
+            }
+
+            // 跳过系统 UI 浮层（程序坞 layer=20 是一个覆盖全屏的透明窗口，菜单栏 24 等），
+            // 它们恒在列表前部且大部分区域是透明的，不能作为"被遮挡"的依据
+            let layer_ptr = CFDictionaryGetValue(dict, kCGWindowLayer);
+            if !layer_ptr.is_null() {
+                let mut layer: i64 = 0;
+                if CFNumberGetValue(layer_ptr, 4 /* kCFNumberSInt64Type */, &mut layer as *mut i64 as *mut c_void) != 0
+                    && layer >= 20
+                {
+                    continue;
+                }
+            }
+
+            let bounds_ptr = CFDictionaryGetValue(dict, kCGWindowBounds);
+            if bounds_ptr.is_null() { continue; }
+            let mut rect = CGRect {
+                origin: CGPoint { x: 0.0, y: 0.0 },
+                size: CGSize { width: 0.0, height: 0.0 },
+            };
+            if CGRectMakeWithDictionaryRepresentation(bounds_ptr, &mut rect) == 0 { continue; }
+
+            let inside = point.x >= rect.origin.x
+                && point.x <= rect.origin.x + rect.size.width
+                && point.y >= rect.origin.y
+                && point.y <= rect.origin.y + rect.size.height;
+            if !inside { continue; }
+
+            // 前到后排序中第一个包含该点的窗口即视觉最上层
+            let mut win_num: i64 = -1;
+            let num_ptr = CFDictionaryGetValue(dict, kCGWindowNumber);
+            if !num_ptr.is_null() {
+                CFNumberGetValue(num_ptr, 4 /* kCFNumberSInt64Type */, &mut win_num as *mut i64 as *mut c_void);
+            }
+            topmost_is_ours = win_num == our_num;
+            break;
+        }
+
+        CFRelease(list);
+        topmost_is_ours
+    }
+
     extern "C" {
         static _dispatch_main_q: c_void;
         fn dispatch_async_f(
@@ -528,6 +622,16 @@ mod macos_window {
             let client_y = height - pt.y;
 
             if client_x >= 0.0 && client_x <= width && client_y >= 0.0 && client_y <= height {
+                // 遮挡检测：鼠标坐标落在窗口范围内，但窗口被其他应用窗口完全盖住时，
+                // 不应视为悬停（例如小组件放在浏览器下方，鼠标停在浏览器上）。
+                let cocoa_x = frame.origin.x + pt.x;
+                let cocoa_y = frame.origin.y + pt.y;
+                // NSScreen 坐标（左下原点、y 向上）→ CoreGraphics 坐标（主屏左上原点、y 向下）
+                let main_height = CGDisplayBounds(CGMainDisplayID()).size.height;
+                let cg_point = CGPoint { x: cocoa_x, y: main_height - cocoa_y };
+                if !is_window_topmost_at_point(ns_window, cg_point) {
+                    return None;
+                }
                 Some((client_x, client_y))
             } else {
                 None
