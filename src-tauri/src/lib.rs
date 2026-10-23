@@ -8,6 +8,13 @@ use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use image::GenericImageView;
 use std::collections::HashMap;
 
+macro_rules! debug_log {
+    ($($arg:tt)*) => {{
+        #[cfg(debug_assertions)]
+        println!($($arg)*);
+    }};
+}
+
 // ── macOS: Override constrainFrameRect safely on tao's existing per-window class ──
 // tao creates a unique NSWindow subclass per window. We add constrainFrameRect to THAT
 // existing class via class_addMethod — NO object_setClass, NO isa change.
@@ -1007,7 +1014,7 @@ fn save_unread_bounce(app: tauri::AppHandle, enabled: bool, amplitude: u32) -> R
     let config_path = format!("{}/.gotify_unread_bounce.json", config_dir);
     let _ = std::fs::write(&config_path, serde_json::to_string_pretty(&cfg).unwrap());
     let _ = app.emit("tauri://unread-bounce-changed", serde_json::json!(cfg));
-    println!("🦘 已保存未读弹跳设置: enabled={}, amp={}px", enabled, clamped_amp);
+    debug_log!("🦘 已保存未读弹跳设置: enabled={}, amp={}px", enabled, clamped_amp);
     Ok(cfg)
 }
 
@@ -1556,11 +1563,10 @@ async fn run_websocket(
                         msg = tokio::time::timeout(std::time::Duration::from_secs(45), read.next()) => {
                             match msg {
                                 Ok(Some(Ok(Message::Text(text)))) => {
-                                    println!("Received message: {}", text);
 
                                     // 解析 Gotify 消息
                                     if let Ok(gotify_msg) = serde_json::from_str::<GotifyMessage>(&text) {
-                                        println!("📨 收到 Gotify 消息: {} (priority={})", gotify_msg.title, gotify_msg.priority);
+                                        debug_log!("📨 收到 Gotify 消息: {} (priority={})", gotify_msg.title, gotify_msg.priority);
 
                                         let sound_cfg = load_sound_config_from_file();
                                         let should_sound = sound_cfg.sound_enabled && gotify_msg.priority >= sound_cfg.min_priority;
@@ -1574,12 +1580,12 @@ async fn run_websocket(
                                             .body(&gotify_msg.message);
 
                                         if should_sound {
-                                            println!("🔔 为通知添加默认系统声音");
+                                            debug_log!("🔔 为通知添加默认系统声音");
                                             notification = notification.sound("default");
                                         }
 
                                         match notification.show() {
-                                            Ok(_) => println!("✅ 系统通知已生成"),
+                                            Ok(_) => debug_log!("✅ 系统通知已生成"),
                                             Err(e) => eprintln!("❌ 发送通知失败: {:?}", e),
                                         }
 
@@ -2683,7 +2689,7 @@ async fn set_widget_mode_opacity(mode: String, opacity: f64) -> Result<f64, Stri
     }
     config.opacity = clamped;
     save_widget_config_to_file(&config)?;
-    println!("💾 已保存 {} 模式透明度: {:.2}", mode, clamped);
+    debug_log!("💾 已保存 {} 模式透明度: {:.2}", mode, clamped);
     Ok(clamped)
 }
 

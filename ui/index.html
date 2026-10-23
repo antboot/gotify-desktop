@@ -963,7 +963,6 @@
     </script>
     <!-- Tauri API 初始化脚本 - 必须在所有脚本之前加载 -->
     <script src="lang.js"></script>
-    <script src="tauri-api.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
     <!-- Tauri v2 事件 API -->
@@ -2178,7 +2177,6 @@
                             }
                         } catch (_) { }
                     };
-                    setInterval(syncConnectionStatus, 3000);
                     window.addEventListener('focus', syncConnectionStatus);
 
                     // 获取服务器地址用于解析图片相对路径

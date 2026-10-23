@@ -44,7 +44,7 @@ jobs:
         if: matrix.platform.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: 缓存 Rust 依赖
         uses: Swatinem/rust-cache@v2
@@ -52,7 +52,7 @@ jobs:
           workspaces: './src-tauri -> target'
 
       - name: 安装 Tauri CLI
-        run: cargo install tauri-cli --version "^2.0.0" --locked
+        run: cargo install tauri-cli --version "^2.12.0" --locked
 
       - name: 构建 Tauri 应用
         run: cargo tauri build --target ${{ matrix.platform.target }} --bundles ${{ matrix.platform.bundles }}
@@ -83,6 +83,22 @@ jobs:
           path: |
             src-tauri/target/${{ matrix.platform.target }}/release/bundle/deb/*.deb
             src-tauri/target/${{ matrix.platform.target }}/release/bundle/appimage/*.AppImage
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 安装 cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: 依赖安全审计
+        working-directory: src-tauri
+        run: cargo audit
 
   release:
     needs: build
