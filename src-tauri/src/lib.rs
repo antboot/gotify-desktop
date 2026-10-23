@@ -215,6 +215,18 @@ mod macos_window {
         true
     }
 
+    // 小组件窗口永不成为 Key/Main Window：系统在窗口获得/失去焦点时会改变
+    // NSGlassEffectView 的高光渲染（并带过渡动画），导致点击瞬间反光闪跳。
+    // 交互依赖 acceptsFirstMouse，不依赖 key 状态。
+    unsafe extern "C" fn no_imp(_this: *mut c_void, _cmd: *mut c_void) -> bool {
+        false
+    }
+
+    // AppKit 在 App 激活时会绕过 canBecomeKeyWindow 把被点击的窗口设为 key；
+    // 这里直接拦截私有的 _setIsKeyWindow:，保证小组件窗口的 key 状态恒为 false，
+    // 从而完全屏蔽系统焦点态的玻璃高光重建（反光闪跳）。
+    unsafe extern "C" fn noop_set_is_key(_this: *mut c_void, _cmd: *mut c_void, _state: i8) {}
+
     unsafe extern "C" fn yes_first_mouse_imp(_this: *mut c_void, _cmd: *mut c_void, _event: *mut c_void) -> bool {
         true
     }
@@ -290,18 +302,32 @@ mod macos_window {
                 }
             }
 
-            // 允许无边框小组件成为 Key Window / Main Window，确保点击与交互顺畅
+            // 小组件窗口永不成为 Key/Main Window（避免焦点态玻璃高光闪跳）
             let key_sel = sel_registerName(b"canBecomeKeyWindow\0".as_ptr() as _);
             let main_sel = sel_registerName(b"canBecomeMainWindow\0".as_ptr() as _);
             let bool_types = b"c@:\0".as_ptr() as *const c_char;
-            let yes_fn: unsafe extern "C" fn() = std::mem::transmute(yes_imp as *const ());
-            if !class_addMethod(cls, key_sel, yes_fn, bool_types) {
+            let no_fn: unsafe extern "C" fn() = std::mem::transmute(no_imp as *const ());
+            if !class_addMethod(cls, key_sel, no_fn, bool_types) {
                 let m = class_getInstanceMethod(cls, key_sel);
-                if !m.is_null() { method_setImplementation(m, yes_fn); }
+                if !m.is_null() { method_setImplementation(m, no_fn); }
             }
-            if !class_addMethod(cls, main_sel, yes_fn, bool_types) {
+            if !class_addMethod(cls, main_sel, no_fn, bool_types) {
                 let m = class_getInstanceMethod(cls, main_sel);
-                if !m.is_null() { method_setImplementation(m, yes_fn); }
+                if !m.is_null() { method_setImplementation(m, no_fn); }
+            }
+            // 小组件窗口不参与 App 激活：点击时不激活本 App，也就不产生 key 窗口，
+            // 从根上避免系统在焦点切换时重建玻璃高光（反光闪跳/两个组件互相联动）。
+            let nonact_sel = sel_registerName(b"_setNonactivatingPanel:\0".as_ptr() as _);
+            msg_usize(win, nonact_sel, 1);
+            let prev_sel = sel_registerName(b"_setPreventsActivation:\0".as_ptr() as _);
+            msg_usize(win, prev_sel, 1);
+
+            let setkey_sel = sel_registerName(b"_setIsKeyWindow:\0".as_ptr() as _);
+            let void_types = b"v@:c\0".as_ptr() as *const c_char;
+            let noop_fn: unsafe extern "C" fn() = std::mem::transmute(noop_set_is_key as *const ());
+            if !class_addMethod(cls, setkey_sel, noop_fn, void_types) {
+                let m = class_getInstanceMethod(cls, setkey_sel);
+                if !m.is_null() { method_setImplementation(m, noop_fn); }
             }
 
             // 允许接收初次鼠标点击，空白处点击也能直接响应并激活
@@ -399,18 +425,32 @@ mod macos_window {
                 }
             }
 
-            // 允许无边框小组件成为 Key Window / Main Window，确保点击与交互顺畅
+            // 小组件窗口永不成为 Key/Main Window（避免焦点态玻璃高光闪跳）
             let key_sel = sel_registerName(b"canBecomeKeyWindow\0".as_ptr() as _);
             let main_sel = sel_registerName(b"canBecomeMainWindow\0".as_ptr() as _);
             let bool_types = b"c@:\0".as_ptr() as *const c_char;
-            let yes_fn: unsafe extern "C" fn() = std::mem::transmute(yes_imp as *const ());
-            if !class_addMethod(cls, key_sel, yes_fn, bool_types) {
+            let no_fn: unsafe extern "C" fn() = std::mem::transmute(no_imp as *const ());
+            if !class_addMethod(cls, key_sel, no_fn, bool_types) {
                 let m = class_getInstanceMethod(cls, key_sel);
-                if !m.is_null() { method_setImplementation(m, yes_fn); }
+                if !m.is_null() { method_setImplementation(m, no_fn); }
             }
-            if !class_addMethod(cls, main_sel, yes_fn, bool_types) {
+            if !class_addMethod(cls, main_sel, no_fn, bool_types) {
                 let m = class_getInstanceMethod(cls, main_sel);
-                if !m.is_null() { method_setImplementation(m, yes_fn); }
+                if !m.is_null() { method_setImplementation(m, no_fn); }
+            }
+            // 小组件窗口不参与 App 激活：点击时不激活本 App，也就不产生 key 窗口，
+            // 从根上避免系统在焦点切换时重建玻璃高光（反光闪跳/两个组件互相联动）。
+            let nonact_sel = sel_registerName(b"_setNonactivatingPanel:\0".as_ptr() as _);
+            msg_usize(win, nonact_sel, 1);
+            let prev_sel = sel_registerName(b"_setPreventsActivation:\0".as_ptr() as _);
+            msg_usize(win, prev_sel, 1);
+
+            let setkey_sel = sel_registerName(b"_setIsKeyWindow:\0".as_ptr() as _);
+            let void_types = b"v@:c\0".as_ptr() as *const c_char;
+            let noop_fn: unsafe extern "C" fn() = std::mem::transmute(noop_set_is_key as *const ());
+            if !class_addMethod(cls, setkey_sel, noop_fn, void_types) {
+                let m = class_getInstanceMethod(cls, setkey_sel);
+                if !m.is_null() { method_setImplementation(m, noop_fn); }
             }
 
             // 允许接收初次鼠标点击，空白处点击也能直接响应并激活
@@ -529,22 +569,6 @@ mod macos_window {
             std::mem::transmute(objc_msgSend as *const ());
         f_front(win, order_front_sel);
 
-        let make_key_sel = sel_registerName(b"makeKeyAndOrderFront:\0".as_ptr() as _);
-        let f_key: unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) =
-            std::mem::transmute(objc_msgSend as *const ());
-        f_key(win, make_key_sel, std::ptr::null_mut());
-
-        let ns_app_cls = objc_getClass(b"NSApplication\0".as_ptr() as _);
-        if !ns_app_cls.is_null() {
-            let shared_sel = sel_registerName(b"sharedApplication\0".as_ptr() as _);
-            let f_shared: unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void =
-                std::mem::transmute(objc_msgSend as *const ());
-            let app = f_shared(ns_app_cls, shared_sel);
-            if !app.is_null() {
-                let act_sel = sel_registerName(b"activateIgnoringOtherApps:\0".as_ptr() as _);
-                msg_usize(app, act_sel, 1);
-            }
-        }
     }
 
     /// 当小组件被点击获得焦点时，临时提升到最前台让用户交互
@@ -1779,12 +1803,22 @@ pub fn run() {
                 #[cfg(target_os = "macos")]
                 {
                     if let Ok(ns_win_ptr) = main_window.ns_window() {
+                        let ptr = ns_win_ptr as *mut std::ffi::c_void;
+                        let init_op = if always_on_top {
+                            widget_config.floating_opacity
+                        } else {
+                            widget_config.desktop_opacity
+                        };
+                        unsafe {
+                            macos_install_liquid_glass(ptr, 26.0, 0.0);
+                            macos_update_liquid_glass(ptr, if always_on_top { 1 } else { 0 }, init_op, 0, 11);
+                        }
                         if always_on_top {
                             let _ = main_window.set_always_on_top(true);
-                            macos_window::schedule_set_floating(ns_win_ptr as *mut std::ffi::c_void, true);
+                            macos_window::schedule_set_floating(ptr, true);
                         } else {
                             let _ = main_window.set_always_on_top(false);
-                            macos_window::schedule_set_desktop_pin(ns_win_ptr as *mut std::ffi::c_void, true);
+                            macos_window::schedule_set_desktop_pin(ptr, true);
                         }
                     }
                 }
@@ -2187,8 +2221,10 @@ pub fn run() {
             set_shelf_opacity,
             set_shelf_mode_opacity,
             activate_widget_window,
+            deactivate_widget_window,
             set_app_shelf_hide_header,
             set_widget_glass,
+            tune_widget_glass,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -2497,19 +2533,54 @@ fn start_dragging_window(window: tauri::WebviewWindow) -> Result<(), String> {
     res
 }
 
-/// 前端交互状态机驱动的原生毛玻璃开关（macOS 常驻磨砂，失焦不变透明）
+/// 前端交互状态机驱动的原生液态玻璃更新（macOS 26/27 NSGlassEffectView 多风格切换 + 光学折射调优）
 #[tauri::command]
-fn set_widget_glass(window: tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
+fn set_widget_glass(
+    window: tauri::WebviewWindow,
+    enabled: bool,
+    opacity: Option<f64>,
+    is_dark: Option<bool>,
+    variant: Option<i32>,
+) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        set_native_widget_glass(&window, enabled);
+        set_native_widget_glass(&window, enabled, opacity, is_dark, variant);
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = (window, enabled);
+        let _ = (window, enabled, opacity, is_dark, variant);
     }
     Ok(())
 }
+
+/// 实时微调原生液态玻璃光学参数（折射弧度、磨砂柔焦、高光棱镜强度、光弧纵深厚度）
+#[tauri::command]
+fn tune_widget_glass(
+    window: tauri::WebviewWindow,
+    refraction: Option<f64>,
+    blur: Option<f64>,
+    highlight: Option<f64>,
+    arc_height: Option<f64>,
+) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(ns_win_ptr) = window.ns_window() {
+            let r = refraction.unwrap_or(0.0);
+            let b = blur.unwrap_or(-1.0);
+            let h = highlight.unwrap_or(-1.0);
+            let a = arc_height.unwrap_or(0.0);
+            unsafe {
+                macos_tune_liquid_glass(ns_win_ptr as *mut std::ffi::c_void, r, b, h, a);
+            }
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (window, refraction, blur, highlight, arc_height);
+    }
+    Ok(())
+}
+
 
 #[tauri::command]
 fn activate_widget_window(window: tauri::WebviewWindow) -> Result<(), String> {
@@ -2525,7 +2596,36 @@ fn activate_widget_window(window: tauri::WebviewWindow) -> Result<(), String> {
             windows_window::bring_to_front(hwnd.0 as isize);
         }
     }
-    let _ = window.set_focus();
+    // 不调用 set_focus：小组件窗口不成为 key 窗口，避免焦点态玻璃高光闪跳
+    Ok(())
+}
+
+/// 空闲态主动沉降回桌面底层（替代原来依赖窗口失焦事件的沉底逻辑；
+/// 小组件窗口不再成为 key 窗口后不会再收到 Focused(false) 事件）
+#[tauri::command]
+fn deactivate_widget_window(window: tauri::WebviewWindow) -> Result<(), String> {
+    let always_on_top = if window.label() == "main" {
+        get_window_always_on_top(window.app_handle().clone())
+    } else if window.label() == "app_shelf" {
+        load_app_shelf_config_from_file().always_on_top
+    } else {
+        false
+    };
+
+    if !always_on_top {
+        #[cfg(target_os = "macos")]
+        {
+            if let Ok(ns_win) = window.ns_window() {
+                macos_window::schedule_sink_to_desktop(ns_win as *mut std::ffi::c_void);
+            }
+        }
+        #[cfg(target_os = "windows")]
+        {
+            if let Ok(hwnd) = window.hwnd() {
+                windows_window::set_desktop_pin(hwnd.0 as isize, true);
+            }
+        }
+    }
     Ok(())
 }
 
@@ -2596,6 +2696,9 @@ extern "C" {
     fn macos_get_display_name(file_path: *const std::ffi::c_char) -> *mut std::ffi::c_char;
     fn macos_get_icon_png(file_path: *const std::ffi::c_char, target_size: i32, out_len: *mut i32) -> *mut u8;
     fn macos_pick_app_file() -> *mut std::ffi::c_char;
+    fn macos_install_liquid_glass(ns_window_ptr: *mut std::ffi::c_void, corner_radius: f64, inset_pt: f64);
+    fn macos_update_liquid_glass(ns_window_ptr: *mut std::ffi::c_void, active: i32, opacity: f64, is_dark: i32, variant_id: i32);
+    fn macos_tune_liquid_glass(ns_window_ptr: *mut std::ffi::c_void, refraction: f64, blur: f64, highlight: f64, arc_height: f64);
     fn free(ptr: *mut std::ffi::c_void);
 }
 
@@ -2608,6 +2711,15 @@ unsafe fn macos_get_icon_png(_file_path: *const std::ffi::c_char, _target_size: 
 #[cfg(not(target_os = "macos"))]
 #[allow(dead_code)]
 unsafe fn macos_pick_app_file() -> *mut std::ffi::c_char { std::ptr::null_mut() }
+#[cfg(not(target_os = "macos"))]
+#[allow(dead_code)]
+unsafe fn macos_install_liquid_glass(_ns_window_ptr: *mut std::ffi::c_void, _corner_radius: f64, _inset_pt: f64) {}
+#[cfg(not(target_os = "macos"))]
+#[allow(dead_code)]
+unsafe fn macos_update_liquid_glass(_ns_window_ptr: *mut std::ffi::c_void, _active: i32, _opacity: f64, _is_dark: i32, _variant_id: i32) {}
+#[cfg(not(target_os = "macos"))]
+#[allow(dead_code)]
+unsafe fn macos_tune_liquid_glass(_ns_window_ptr: *mut std::ffi::c_void, _refraction: f64, _blur: f64, _highlight: f64, _arc_height: f64) {}
 #[cfg(not(target_os = "macos"))]
 #[allow(dead_code)]
 unsafe fn free(_ptr: *mut std::ffi::c_void) {}
@@ -2736,26 +2848,33 @@ fn get_app_icon_data_url(path: &str) -> String {
     String::new()
 }
 
-/// 桌面小组件专用原生毛玻璃开关：
-/// macOS 的窗口毛玻璃（NSVisualEffectView）默认跟随窗口激活状态 —— 一旦窗口失焦
-/// （沉底桌面 / 用户点了别处），系统就会撤销模糊，小组件瞬间由「磨砂」退化为
-/// 「纯透明底色」。这正是「点击后 1~2 秒又变透明」的根因。
-/// 因此这里不让系统自动管理，而是由前端交互状态机显式开关：
-/// - 点击 / 悬停 / 拖动时：启用 state = Active 的原生磨砂（不依赖窗口是否获得焦点）；
-/// - 空闲恢复透明时：移除毛玻璃，仅保留极淡的玻璃底色，回归“通透”的桌面形态。
 #[cfg(target_os = "macos")]
-fn set_native_widget_glass(window: &tauri::WebviewWindow, enabled: bool) {
-    use tauri::window::{Effect, EffectState, EffectsBuilder};
-    let effects = if enabled {
-        EffectsBuilder::new()
-            .effect(Effect::HudWindow)
-            .state(EffectState::Active)
-            .radius(16.0)
-            .build()
-    } else {
-        EffectsBuilder::new().build()
-    };
-    let _ = window.set_effects(effects);
+fn set_native_widget_glass(
+    window: &tauri::WebviewWindow,
+    enabled: bool,
+    opacity: Option<f64>,
+    is_dark: Option<bool>,
+    variant: Option<i32>,
+) {
+    if let Ok(ns_win_ptr) = window.ns_window() {
+        let fallback_op = if window.label() == "app_shelf" {
+            load_app_shelf_config_from_file().opacity
+        } else {
+            load_widget_config_from_file().opacity
+        };
+        let op = opacity.unwrap_or(fallback_op).clamp(0.05, 1.0);
+        let dark = is_dark.unwrap_or(false);
+        let var_id = variant.unwrap_or(11);
+        unsafe {
+            macos_update_liquid_glass(
+                ns_win_ptr as *mut std::ffi::c_void,
+                if enabled { 1 } else { 0 },
+                op,
+                if dark { 1 } else { 0 },
+                var_id,
+            );
+        }
+    }
 }
 
 pub fn create_app_shelf_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
@@ -2799,10 +2918,16 @@ pub fn create_app_shelf_window(app: &tauri::AppHandle) -> Result<tauri::WebviewW
     #[cfg(target_os = "macos")]
     {
         if let Ok(ns_win_ptr) = win.ns_window() {
+            let ptr = ns_win_ptr as *mut std::ffi::c_void;
+            let init_op = if cfg.always_on_top { cfg.floating_opacity } else { cfg.desktop_opacity };
+            unsafe {
+                macos_install_liquid_glass(ptr, 26.0, 0.0);
+                macos_update_liquid_glass(ptr, if cfg.always_on_top { 1 } else { 0 }, init_op, 0, 11);
+            }
             if cfg.always_on_top {
-                macos_window::schedule_set_floating(ns_win_ptr as *mut std::ffi::c_void, true);
+                macos_window::schedule_set_floating(ptr, true);
             } else {
-                macos_window::schedule_set_desktop_pin(ns_win_ptr as *mut std::ffi::c_void, true);
+                macos_window::schedule_set_desktop_pin(ptr, true);
             }
         }
     }

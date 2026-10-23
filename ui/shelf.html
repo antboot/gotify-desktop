@@ -65,27 +65,24 @@
             box-shadow: none !important;
         }
 
-        /* 桌面应用盒卡片：16px 圆角与液态玻璃质感 */
+        /* 桌面应用盒卡片：26px 连续曲率圆角，100% 释放 macOS 原生 NSGlassEffectView 光学透镜 */
         .desktop-widget-card {
             position: relative;
             width: 100%;
             height: 100%;
-            border-radius: 16px !important;
+            border-radius: 26px !important;
             overflow: hidden !important;
             transform: translateZ(0);
             -webkit-transform: translateZ(0);
-            will-change: transform, backdrop-filter;
+            will-change: transform;
             -webkit-backface-visibility: hidden;
             backface-visibility: hidden;
-            /* 磨砂模糊由原生 NSVisualEffectView（set_widget_glass）提供：
-               WebKit 的 backdrop-filter 在窗口失焦时会被系统撤销渲染，
-               而系统级毛玻璃可由 state=Active 显式控制，交互期间绝不消失 */
-            background: rgba(22, 28, 40, var(--widget-opacity, 0.45)) !important;
-            border: 1px solid rgba(255, 255, 255, 0.16) !important;
-            box-shadow:
-                inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.28),
-                inset 0 -1px 1px 0 rgba(0, 0, 0, 0.25),
-                inset 0 0 0 0.5px rgba(255, 255, 255, 0.08) !important;
+            /* 默认 0 底色遮罩（--glass-tint-alpha: 0），让原生 NSGlassEffectView 100% 原汁原味呈现 */
+            background: rgba(10, 14, 24, var(--glass-tint-alpha, 0)) !important;
+            border: none !important;
+            box-shadow: inset 0 calc(0.06 * var(--glass-arc-height, 20px) * var(--glass-highlight-mul, 1)) 0 rgba(255, 255, 255, calc(0.50 * var(--glass-highlight-mul, 1))),
+                        inset 0 calc(-0.05 * var(--glass-arc-height, 20px) * var(--glass-highlight-mul, 1)) 0 rgba(255, 255, 255, calc(0.25 * var(--glass-highlight-mul, 1))),
+                        inset 0 0 0 0.5px rgba(255, 255, 255, calc(0.20 * var(--glass-highlight-mul, 1))) !important;
             display: flex !important;
             flex-direction: column !important;
             box-sizing: border-box !important;
@@ -94,42 +91,35 @@
             -webkit-user-select: none;
             pointer-events: auto !important;
             cursor: grab;
-            transition: background 0.22s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.22s ease, box-shadow 0.22s ease;
+            transition: background 0.2s ease;
+        }
+
+        .desktop-widget-card::before {
+            display: none !important;
         }
 
         .desktop-widget-card.is-active,
         .desktop-widget-card.is-focused {
-            background: rgba(22, 28, 40, var(--widget-active-opacity, 0.65)) !important;
-            border-color: rgba(255, 255, 255, 0.26) !important;
-            box-shadow:
-                inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.38),
-                inset 0 -1px 1px 0 rgba(0, 0, 0, 0.25),
-                inset 0 0 0 0.5px rgba(255, 255, 255, 0.12) !important;
+            background: rgba(10, 14, 24, var(--glass-tint-alpha, 0)) !important;
+            border: none !important;
+            box-shadow: inset 0 calc(0.06 * var(--glass-arc-height, 20px) * var(--glass-highlight-mul, 1)) 0 rgba(255, 255, 255, calc(0.50 * var(--glass-highlight-mul, 1))),
+                        inset 0 calc(-0.05 * var(--glass-arc-height, 20px) * var(--glass-highlight-mul, 1)) 0 rgba(255, 255, 255, calc(0.25 * var(--glass-highlight-mul, 1))),
+                        inset 0 0 0 0.5px rgba(255, 255, 255, calc(0.20 * var(--glass-highlight-mul, 1))) !important;
         }
 
         .desktop-widget-card.is-transitioning {
-            transition: background 0.35s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.35s ease, box-shadow 0.35s ease;
+            transition: background 0.3s ease;
         }
 
-        [data-theme="light"] .desktop-widget-card {
-            background: rgba(245, 247, 252, var(--widget-opacity, 0.45)) !important;
-            border: 1px solid rgba(255, 255, 255, 0.65) !important;
-            box-shadow:
-                inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.85),
-                inset 0 -1px 1px 0 rgba(0, 0, 0, 0.05),
-                inset 0 0 0 0.5px rgba(255, 255, 255, 0.35) !important;
-            color: #1a1a2e !important;
-            transition: background 0.22s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.22s ease, box-shadow 0.22s ease;
-        }
-
+        [data-theme="light"] .desktop-widget-card,
         [data-theme="light"] .desktop-widget-card.is-active,
         [data-theme="light"] .desktop-widget-card.is-focused {
-            background: rgba(245, 247, 252, var(--widget-active-opacity, 0.75)) !important;
-            border-color: rgba(255, 255, 255, 0.85) !important;
-            box-shadow:
-                inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.95),
-                inset 0 -1px 1px 0 rgba(0, 0, 0, 0.08),
-                inset 0 0 0 0.5px rgba(255, 255, 255, 0.50) !important;
+            background: rgba(255, 255, 255, var(--glass-tint-alpha, 0)) !important;
+            border: none !important;
+            box-shadow: inset 0 calc(0.06 * var(--glass-arc-height, 20px) * var(--glass-highlight-mul, 1)) 0 rgba(255, 255, 255, calc(0.75 * var(--glass-highlight-mul, 1))),
+                        inset 0 calc(-0.05 * var(--glass-arc-height, 20px) * var(--glass-highlight-mul, 1)) 0 rgba(0, 0, 0, calc(0.12 * var(--glass-highlight-mul, 1))),
+                        inset 0 0 0 0.5px rgba(255, 255, 255, calc(0.40 * var(--glass-highlight-mul, 1))) !important;
+            color: #1a1a2e !important;
         }
 
         .widget-header {
@@ -414,48 +404,174 @@
             background: rgba(0, 0, 0, 0.08);
         }
 
-        /* 透明度调节 Popover */
+        /* 液态玻璃风格与透明度调节 Popover */
+        /* 液态玻璃风格与光学调优 Popover：精致 macOS 磨砂面板 */
         .widget-opacity-popover {
             position: absolute;
-            top: 42px;
-            right: 12px;
+            top: 8px;
+            right: 8px;
             z-index: 1000;
-            width: 210px;
-            background: rgba(30, 36, 50, 0.96);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.18);
-            border-radius: 12px;
-            padding: 12px;
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+            width: 278px;
+            max-width: calc(100% - 16px);
+            max-height: calc(100% - 16px);
+            overflow-y: auto;
+            background: rgba(18, 24, 38, 0.94);
+            backdrop-filter: blur(28px);
+            -webkit-backdrop-filter: blur(28px);
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            border-radius: 18px;
+            padding: 12px 14px;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08);
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 9px;
             animation: fadeIn 0.15s ease-out;
         }
 
+        .widget-opacity-popover::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .widget-opacity-popover::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.25);
+            border-radius: 2px;
+        }
+
         [data-theme="light"] .widget-opacity-popover {
-            background: rgba(255, 255, 255, 0.96);
+            background: rgba(255, 255, 255, 0.94);
             border: 1px solid rgba(0, 0, 0, 0.12);
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.05);
         }
 
         .popover-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
+            gap: 6px;
+            padding-bottom: 2px;
         }
 
         .popover-title {
             font-size: 12px;
-            font-weight: 600;
+            font-weight: 700;
             color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
         }
 
         .opacity-val-badge {
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 700;
-            color: var(--accent);
+            color: #38bdf8;
+            background: rgba(56, 189, 248, 0.14);
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            padding: 1px 6px;
+            border-radius: 5px;
+            white-space: nowrap;
+        }
+
+        .glass-nav-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 4px;
+        }
+
+        .glass-step-btn {
+            padding: 3px 8px;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            color: var(--text-primary);
+            font-size: 10.5px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .glass-step-btn:hover {
+            background: rgba(255, 255, 255, 0.18);
+        }
+
+        .glass-style-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 6px;
+        }
+
+        .glass-chip {
+            padding: 6px 8px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: var(--text-secondary);
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            transition: all 0.15s ease;
+        }
+
+        .glass-chip:hover {
+            background: rgba(255, 255, 255, 0.16);
+            color: var(--text-primary);
+        }
+
+        .glass-chip.active {
+            background: linear-gradient(135deg, rgba(14, 165, 233, 0.92), rgba(99, 102, 241, 0.92));
+            color: #ffffff;
+            border-color: rgba(255, 255, 255, 0.55);
+            box-shadow: 0 2px 10px rgba(14, 165, 233, 0.4);
+        }
+
+        .glass-desc-bar {
+            font-size: 10.5px;
+            color: var(--text-secondary);
+            text-align: center;
+            padding: 4px 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 6px;
+            font-weight: 500;
+        }
+
+        .tuning-group {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .tuning-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .tuning-label {
+            font-size: 10.5px;
+            color: var(--text-primary);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .tuning-hint {
+            font-size: 9px;
+            color: var(--text-secondary);
+            font-weight: 400;
+        }
+
+        .tuning-val {
+            font-size: 10.5px;
+            font-weight: 700;
+            color: #38bdf8;
+            font-family: ui-monospace, SFMono-Regular, monospace;
         }
 
         .opacity-slider {
@@ -469,10 +585,10 @@
 
         .opacity-slider::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 14px;
-            height: 14px;
+            width: 13px;
+            height: 13px;
             border-radius: 50%;
-            background: var(--accent);
+            background: #38bdf8;
             cursor: pointer;
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
         }
@@ -490,7 +606,7 @@
             background: rgba(255, 255, 255, 0.08);
             border: 1px solid rgba(255, 255, 255, 0.1);
             color: var(--text-secondary);
-            font-size: 10px;
+            font-size: 9.5px;
             font-weight: 600;
             cursor: pointer;
             text-align: center;
@@ -532,7 +648,7 @@
                 </div>
                 <div class="widget-actions" onmousedown="event.stopPropagation()">
                     <button class="icon-btn" onclick="onAddAppClick(event)" title="添加应用...">➕</button>
-                    <button class="icon-btn" id="opacityBtn" onclick="toggleOpacityPopover(event)" title="调节透明度">💧</button>
+                    <button class="icon-btn" id="opacityBtn" onclick="toggleOpacityPopover(event)" title="液态玻璃风格与透明度">💧</button>
                     <button class="icon-btn" onclick="toggleTheme(event)" title="切换深/浅主题">🌓</button>
                     <button class="icon-btn" onclick="toggleHeaderBar(event)" title="隐藏顶部栏 (右键菜单可重新显示)">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -554,20 +670,89 @@
                 <span>释放以添加到应用盒</span>
             </div>
 
-            <!-- 透明度弹窗 -->
+            <!-- 液态玻璃风格与光学调优弹窗 -->
             <div class="widget-opacity-popover" id="opacityPopover" style="display: none;" onmousedown="event.stopPropagation()">
                 <div class="popover-header">
-                    <span class="popover-title">透明度调节</span>
-                    <span class="opacity-val-badge" id="opacityBadge">45%</span>
+                    <span class="popover-title">💧 液态玻璃 <span class="opacity-val-badge" id="glassVariantBadge">v11</span></span>
+                    <div style="display:flex; gap:4px; align-items:center;">
+                        <button class="glass-step-btn" id="glassPolarityBtn" onclick="toggleGlassPolarity(event)" title="切换亮色/暗色光学棱镜">☀️亮棱镜</button>
+                        <button class="glass-step-btn" onclick="toggleOpacityPopover(event)" title="关闭面板">✕</button>
+                    </div>
                 </div>
-                <input type="range" class="opacity-slider" id="opacitySlider" min="10" max="100" value="45"
-                    oninput="onOpacityInput(event)" onchange="onOpacityChange(event)">
-                <div class="preset-row">
-                    <button class="preset-chip" onclick="setPresetOpacity(0.20)">20%</button>
-                    <button class="preset-chip" onclick="setPresetOpacity(0.35)">35%</button>
-                    <button class="preset-chip" onclick="setPresetOpacity(0.50)">50%</button>
-                    <button class="preset-chip" onclick="setPresetOpacity(0.75)">75%</button>
-                    <button class="preset-chip" onclick="setPresetOpacity(0.95)">95%</button>
+
+                <!-- 4款精心雕琢的液态玻璃风格（全部基于v11纯正液态透镜引擎衍生） -->
+                <div class="glass-style-grid" id="glassStyleGrid">
+                    <button class="glass-chip active" data-variant="11" onclick="setGlassVariant(11, event)" title="原生水滴透镜：零模糊纯透折射，保留原生上下高光亮边">💧 晶透水滴</button>
+                    <button class="glass-chip" data-variant="13" onclick="setGlassVariant(13, event)" title="深弧透镜：-76 超强折射曲率，28px 光学张力宽弧">🔍 深弧透镜</button>
+                    <button class="glass-chip" data-variant="14" onclick="setGlassVariant(14, event)" title="浮光色散：水滴透镜边缘微弱彩虹色散光斑">🌈 浮光色散</button>
+                    <button class="glass-chip" data-variant="15" onclick="setGlassVariant(15, event)" title="黑曜水晶：暗调高反差水晶质感，微光边框">💎 黑曜水晶</button>
+                </div>
+
+                <div class="glass-desc-bar" id="glassVariantDesc">💧 晶透水滴 · 原生纯正透镜</div>
+
+                <!-- 5项高级光学参数微调 -->
+                <div class="tuning-group">
+                    <div class="tuning-row">
+                        <div class="tuning-label">
+                            <span>折射弧度</span>
+                            <span class="tuning-hint">(凸透镜曲率)</span>
+                        </div>
+                        <span class="tuning-val" id="refractValBadge">-50</span>
+                    </div>
+                    <input type="range" class="opacity-slider" id="refractSlider" min="-90" max="-20" value="-50" step="1"
+                        oninput="onRefractSliderInput(event)" onchange="onRefractSliderChange(event)">
+                </div>
+
+                <div class="tuning-group">
+                    <div class="tuning-row">
+                        <div class="tuning-label">
+                            <span>反光亮度</span>
+                            <span class="tuning-hint">(上下镜面反射)</span>
+                        </div>
+                        <span class="tuning-val" id="highlightValBadge">100%</span>
+                    </div>
+                    <input type="range" class="opacity-slider" id="highlightSlider" min="0" max="200" value="100" step="5"
+                        oninput="onHighlightSliderInput(event)" onchange="onHighlightSliderChange(event)">
+                </div>
+
+                <div class="tuning-group">
+                    <div class="tuning-row">
+                        <div class="tuning-label">
+                            <span>反光厚度</span>
+                            <span class="tuning-hint">(光弧纵深高度)</span>
+                        </div>
+                        <span class="tuning-val" id="arcHeightValBadge">20px</span>
+                    </div>
+                    <input type="range" class="opacity-slider" id="arcHeightSlider" min="8" max="36" value="20" step="1"
+                        oninput="onArcHeightSliderInput(event)" onchange="onArcHeightSliderChange(event)">
+                </div>
+
+                <div class="tuning-group">
+                    <div class="tuning-row">
+                        <div class="tuning-label">
+                            <span>磨砂柔焦</span>
+                            <span class="tuning-hint">(背景柔和度)</span>
+                        </div>
+                        <span class="tuning-val" id="blurValBadge">0.0px</span>
+                    </div>
+                    <input type="range" class="opacity-slider" id="blurSlider" min="0" max="10" value="0" step="0.5"
+                        oninput="onBlurSliderInput(event)" onchange="onBlurSliderChange(event)">
+                </div>
+
+                <div class="tuning-group">
+                    <div class="tuning-row">
+                        <div class="tuning-label">
+                            <span>底色浓度</span>
+                            <span class="tuning-hint">(0%=100%纯原生)</span>
+                        </div>
+                        <span class="tuning-val" id="opacityBadge">0%</span>
+                    </div>
+                    <input type="range" class="opacity-slider" id="opacitySlider" min="0" max="75" value="0" step="1"
+                        oninput="onOpacityInput(event)" onchange="onOpacityChange(event)">
+                </div>
+
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:2px;">
+                    <button class="glass-step-btn" style="width:100%; text-align:center;" onclick="resetGlassToDefaults(event)">↺ 恢复当前风格默认值</button>
                 </div>
             </div>
 
@@ -592,10 +777,10 @@
                     <span id="pinIcon">📌</span> <span id="pinText">悬浮置顶 (前台)</span>
                 </div>
                 <div class="context-menu-item" onclick="toggleOpacityPopover(event)">
-                    <span>💧</span> <span>调节透明度</span>
+                    <span>💧</span> <span>液态玻璃风格与透明度...</span>
                 </div>
                 <div class="context-menu-item" onclick="toggleTheme(event)">
-                    <span>🌓</span> <span>切换深/浅主题</span>
+                    <span>🌓</span> <span>切换文字深/浅色</span>
                 </div>
                 <div class="context-menu-item" onclick="toggleHeaderBar(event)">
                     <span id="menuHeaderIcon">🙈</span> <span id="menuHeaderText">隐藏顶部栏</span>
@@ -620,11 +805,48 @@
     <script>
         let appItems = [];
         let isAlwaysOnTop = false;
-        let floatingOpacity = 0.92;
-        let desktopOpacity = 0.35;
+        let floatingOpacity = 0.0;
+        let desktopOpacity = 0.0;
+        let currentOpacity = 0.0;
         let activeContextItemId = null;
         let activeContextItemPath = null;
         let isHeaderHidden = false;
+
+        // 4款精心雕琢的液态玻璃风格（全部基于v11纯正液态透镜引擎衍生）
+        const GLASS_VARIANTS = [
+            { id: 11, label: '💧 晶透水滴', tag: 'v11 水滴', desc: '原生水滴透镜 · 零模糊纯粹清透 (原汁原味)', defaultRefract: -50, defaultBlur: 0.0, defaultHighlight: 100, defaultArcHeight: 20 },
+            { id: 13, label: '🔍 深弧透镜', tag: 'v13 深弧', desc: '-76 强力深弧折射 · 凸透镜光学张力', defaultRefract: -76, defaultBlur: 0.0, defaultHighlight: 120, defaultArcHeight: 28 },
+            { id: 14, label: '🌈 浮光色散', tag: 'v14 色散', desc: '水滴透镜 · 边缘微弱彩虹色散光斑', defaultRefract: -58, defaultBlur: 0.0, defaultHighlight: 110, defaultArcHeight: 22 },
+            { id: 15, label: '💎 黑曜水晶', tag: 'v15 水晶', desc: '深调水晶质感 · 高对比边缘反光', defaultRefract: -65, defaultBlur: 1.5, defaultHighlight: 130, defaultArcHeight: 24 }
+        ];
+
+        let currentGlassVariant = (() => {
+            const saved = parseInt(localStorage.getItem('liquid_glass_variant'), 10);
+            return (Number.isNaN(saved) || saved < 11 || saved > 15 || saved === 12) ? 11 : saved;
+        })();
+
+        // 默认使用 Aqua 亮色光学棱镜（isGlassDark = false），使 v11 呈现晶莹剔透的亮白水滴边缘
+        let isGlassDark = localStorage.getItem('liquid_glass_dark') === 'true';
+
+        let currentRefract = (() => {
+            const saved = parseFloat(localStorage.getItem('liquid_glass_refract'));
+            return Number.isNaN(saved) ? null : saved;
+        })();
+
+        let currentBlur = (() => {
+            const saved = parseFloat(localStorage.getItem('liquid_glass_blur'));
+            return Number.isNaN(saved) ? null : saved;
+        })();
+
+        let currentHighlight = (() => {
+            const saved = parseFloat(localStorage.getItem('liquid_glass_highlight'));
+            return Number.isNaN(saved) ? null : saved;
+        })();
+
+        let currentArcHeight = (() => {
+            const saved = parseFloat(localStorage.getItem('liquid_glass_arc_height'));
+            return Number.isNaN(saved) ? null : saved;
+        })();
 
         const invoke = (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke) ?
             window.__TAURI_INTERNALS__.invoke : async () => {};
@@ -632,7 +854,208 @@
         // 点击小组件任意区域时，立即将窗口提升至前台并持续保持磨砂半透明状态（至少 3 秒）
         let activeHoldTimer = null;
         let isMouseInsideCard = false;
-        let glassEnabled = false;
+        let glassEnabled = true;
+
+        function getCurrentVariantInfo() {
+            return GLASS_VARIANTS.find(v => v.id === currentGlassVariant) || GLASS_VARIANTS[0];
+        }
+
+        function updateGlassVariantUI() {
+            const info = getCurrentVariantInfo();
+            const badge = document.getElementById('glassVariantBadge');
+            if (badge) badge.textContent = `v${info.id}`;
+            const desc = document.getElementById('glassVariantDesc');
+            if (desc) desc.textContent = info.desc;
+            const polBtn = document.getElementById('glassPolarityBtn');
+            if (polBtn) polBtn.textContent = isGlassDark ? '🌙暗棱镜' : '☀️亮棱镜';
+
+            document.querySelectorAll('#glassStyleGrid .glass-chip').forEach(btn => {
+                const vid = parseInt(btn.getAttribute('data-variant'), 10);
+                if (vid === currentGlassVariant) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+
+            // 更新滑块显示
+            const effectiveRefract = currentRefract !== null ? currentRefract : info.defaultRefract;
+            const effectiveBlur = currentBlur !== null ? currentBlur : info.defaultBlur;
+            const effectiveHighlight = currentHighlight !== null ? currentHighlight : info.defaultHighlight;
+            const effectiveArcHeight = currentArcHeight !== null ? currentArcHeight : (info.defaultArcHeight || 20);
+
+            const rSlider = document.getElementById('refractSlider');
+            if (rSlider) rSlider.value = effectiveRefract;
+            const rBadge = document.getElementById('refractValBadge');
+            if (rBadge) rBadge.textContent = effectiveRefract;
+
+            const bSlider = document.getElementById('blurSlider');
+            if (bSlider) bSlider.value = effectiveBlur;
+            const bBadge = document.getElementById('blurValBadge');
+            if (bBadge) bBadge.textContent = `${effectiveBlur.toFixed(1)}px`;
+
+            const hSlider = document.getElementById('highlightSlider');
+            if (hSlider) hSlider.value = effectiveHighlight;
+            const hBadge = document.getElementById('highlightValBadge');
+            if (hBadge) hBadge.textContent = `${effectiveHighlight}%`;
+            document.documentElement.style.setProperty('--glass-highlight-mul', (effectiveHighlight / 100.0).toString());
+
+            const aSlider = document.getElementById('arcHeightSlider');
+            if (aSlider) aSlider.value = effectiveArcHeight;
+            const aBadge = document.getElementById('arcHeightValBadge');
+            if (aBadge) aBadge.textContent = `${effectiveArcHeight}px`;
+            document.documentElement.style.setProperty('--glass-arc-height', `${effectiveArcHeight}px`);
+        }
+
+        function setGlassVariant(variantId, e) {
+            if (e) e.stopPropagation();
+            currentGlassVariant = variantId;
+            localStorage.setItem('liquid_glass_variant', String(variantId));
+            // 切换预设时清空手动覆盖，使预设光学质感完整呈现
+            currentRefract = null;
+            currentBlur = null;
+            currentHighlight = null;
+            currentArcHeight = null;
+            localStorage.removeItem('liquid_glass_refract');
+            localStorage.removeItem('liquid_glass_blur');
+            localStorage.removeItem('liquid_glass_highlight');
+            localStorage.removeItem('liquid_glass_arc_height');
+            updateGlassVariantUI();
+            syncNativeLiquidGlass();
+            syncGlassTuning();
+        }
+
+        function toggleGlassPolarity(e) {
+            if (e) e.stopPropagation();
+            isGlassDark = !isGlassDark;
+            localStorage.setItem('liquid_glass_dark', String(isGlassDark));
+            updateGlassVariantUI();
+            syncNativeLiquidGlass();
+        }
+
+        function onRefractSliderInput(e) {
+            currentRefract = parseFloat(e.target.value);
+            localStorage.setItem('liquid_glass_refract', String(currentRefract));
+            const rBadge = document.getElementById('refractValBadge');
+            if (rBadge) rBadge.textContent = currentRefract;
+            syncGlassTuning();
+        }
+
+        function onRefractSliderChange(e) {
+            currentRefract = parseFloat(e.target.value);
+            localStorage.setItem('liquid_glass_refract', String(currentRefract));
+            syncGlassTuning();
+        }
+
+        function onBlurSliderInput(e) {
+            currentBlur = parseFloat(e.target.value);
+            localStorage.setItem('liquid_glass_blur', String(currentBlur));
+            const bBadge = document.getElementById('blurValBadge');
+            if (bBadge) bBadge.textContent = `${currentBlur.toFixed(1)}px`;
+            syncGlassTuning();
+        }
+
+        function onBlurSliderChange(e) {
+            currentBlur = parseFloat(e.target.value);
+            localStorage.setItem('liquid_glass_blur', String(currentBlur));
+            syncGlassTuning();
+        }
+
+        function onHighlightSliderInput(e) {
+            currentHighlight = parseFloat(e.target.value);
+            localStorage.setItem('liquid_glass_highlight', String(currentHighlight));
+            const hBadge = document.getElementById('highlightValBadge');
+            if (hBadge) hBadge.textContent = `${currentHighlight}%`;
+            document.documentElement.style.setProperty('--glass-highlight-mul', (currentHighlight / 100.0).toString());
+            syncGlassTuning();
+        }
+
+        function onHighlightSliderChange(e) {
+            currentHighlight = parseFloat(e.target.value);
+            localStorage.setItem('liquid_glass_highlight', String(currentHighlight));
+            syncGlassTuning();
+        }
+
+        function onArcHeightSliderInput(e) {
+            currentArcHeight = parseFloat(e.target.value);
+            localStorage.setItem('liquid_glass_arc_height', String(currentArcHeight));
+            const aBadge = document.getElementById('arcHeightValBadge');
+            if (aBadge) aBadge.textContent = `${currentArcHeight}px`;
+            document.documentElement.style.setProperty('--glass-arc-height', `${currentArcHeight}px`);
+            syncGlassTuning();
+        }
+
+        function onArcHeightSliderChange(e) {
+            currentArcHeight = parseFloat(e.target.value);
+            localStorage.setItem('liquid_glass_arc_height', String(currentArcHeight));
+            syncGlassTuning();
+        }
+
+        function resetGlassToDefaults(e) {
+            if (e) e.stopPropagation();
+            currentRefract = null;
+            currentBlur = null;
+            currentHighlight = null;
+            currentArcHeight = null;
+            localStorage.removeItem('liquid_glass_refract');
+            localStorage.removeItem('liquid_glass_blur');
+            localStorage.removeItem('liquid_glass_highlight');
+            localStorage.removeItem('liquid_glass_arc_height');
+            updateGlassVariantUI();
+            syncNativeLiquidGlass();
+            syncGlassTuning();
+        }
+
+        // 同步 macOS 原生液态玻璃调优参数（折射曲率、柔焦高斯模糊、高光棱镜强度、光弧厚度）
+        const syncGlassTuning = () => {
+            const info = getCurrentVariantInfo();
+            const r = currentRefract !== null ? currentRefract : info.defaultRefract;
+            const b = currentBlur !== null ? currentBlur : info.defaultBlur;
+            const h = (currentHighlight !== null ? currentHighlight : info.defaultHighlight) / 100.0;
+            const a = currentArcHeight !== null ? currentArcHeight : (info.defaultArcHeight || 20);
+            document.documentElement.style.setProperty('--glass-highlight-mul', h.toString());
+            document.documentElement.style.setProperty('--glass-arc-height', `${a}px`);
+            try {
+                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                    window.__TAURI_INTERNALS__.invoke('tune_widget_glass', {
+                        refraction: r,
+                        blur: b,
+                        highlight: h,
+                        arcHeight: a
+                    }).catch(() => {});
+                }
+            } catch (_) {}
+        };
+
+        // 同步 macOS 原生液态玻璃（NSGlassEffectView + CABackdropLayer 光学折射参数）
+        const syncNativeLiquidGlass = (activeOverride) => {
+            const active = typeof activeOverride === 'boolean' ? activeOverride : glassEnabled;
+            glassEnabled = active;
+            const op = typeof currentOpacity === 'number' ? currentOpacity : 0.0;
+            try {
+                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
+                    window.__TAURI_INTERNALS__.invoke('set_widget_glass', {
+                        enabled: active,
+                        opacity: op,
+                        isDark: isGlassDark,
+                        variant: currentGlassVariant
+                    }).catch(() => {});
+                }
+            } catch (_) {}
+            syncGlassTuning();
+        };
+
+        // 鼠标位置驱动的液态玻璃焦散高光坐标更新
+        const updateGlassSpecularPoint = (clientX, clientY) => {
+            const card = document.getElementById('shelfCard');
+            if (!card) return;
+            const rect = card.getBoundingClientRect();
+            if (rect.width <= 0 || rect.height <= 0) return;
+            const xPct = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+            const yPct = Math.max(0, Math.min(100, ((clientY - rect.top) / rect.height) * 100));
+            card.style.setProperty('--glass-mouse-x', `${xPct.toFixed(1)}%`);
+            card.style.setProperty('--glass-mouse-y', `${yPct.toFixed(1)}%`);
+        };
 
         const setWidgetActiveState = (active) => {
             const card = document.getElementById('shelfCard');
@@ -641,19 +1064,15 @@
                 card.classList.add('is-active', 'is-focused');
             } else {
                 card.classList.remove('is-active', 'is-focused');
-            }
-            // 原生毛玻璃跟随交互状态显式开关：
-            // macOS 系统只给「当前焦点的窗口」渲染毛玻璃，窗口一失焦磨砂就会瞬间消失，
-            // 出现「点击后 1~2 秒又变透明」的问题。这里由状态机显式控制原生磨砂，
-            // 交互期间无论窗口是否失焦都保持磨砂，空闲时再移除、回归通透桌面形态。
-            const nextGlass = !!active;
-            if (nextGlass !== glassEnabled) {
-                glassEnabled = nextGlass;
+                // 空闲后主动沉降回桌面底层（小组件窗口不再成为 key 窗口，依赖不到失焦事件）
                 try {
                     if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
-                        window.__TAURI_INTERNALS__.invoke('set_widget_glass', { enabled: nextGlass }).catch(() => {});
+                        window.__TAURI_INTERNALS__.invoke('deactivate_widget_window').catch(() => {});
                     }
                 } catch (_) {}
+                // 回到平态时重新下发用户的液态玻璃调优参数（反光亮度等）：
+                // 激活瞬间 Apple 会用默认高光覆盖原生玻璃的镜面层，需要在这里写回
+                syncGlassTuning();
             }
         };
 
@@ -679,24 +1098,29 @@
         window.addEventListener('mousedown', activateWidget, true);
         window.addEventListener('pointerdown', activateWidget, true);
 
-        // 鼠标移入小组件时保持磨砂
-        window.addEventListener('mouseenter', () => {
+        // 鼠标移入小组件时更新焦散光斑
+        window.addEventListener('mouseenter', (e) => {
             isMouseInsideCard = true;
+            if (e && typeof e.clientX === 'number') {
+                updateGlassSpecularPoint(e.clientX, e.clientY);
+            }
             keepActive(3000);
         });
-        window.addEventListener('mousemove', () => {
+        window.addEventListener('mousemove', (e) => {
             if (!isMouseInsideCard) {
                 isMouseInsideCard = true;
+            }
+            if (e && typeof e.clientX === 'number') {
+                updateGlassSpecularPoint(e.clientX, e.clientY);
             }
         });
         window.addEventListener('mouseleave', () => {
             isMouseInsideCard = false;
-            // 鼠标移出后，再保持 3 秒才平滑恢复透明
+            // 鼠标移出后，再保持 3 秒才恢复平态
             keepActive(3000);
         });
 
-        // 窗口真实焦点变化由后端逐窗口精确派发（DOM focus/blur 在 App 激活时会串扰）：
-        // 获得焦点 → 保持磨砂；失去焦点（如点击打开了其他应用）→ 延后 3 秒再恢复透明
+        // 窗口真实焦点变化由后端逐窗口精确派发
         const onWindowFocusChanged = (focused) => {
             if (focused) {
                 keepActive(3000);
@@ -713,10 +1137,38 @@
 
         // 初始化
         document.addEventListener('DOMContentLoaded', async () => {
+            updateGlassVariantUI();
             initTheme();
+            syncGlassTuning();
             await loadShelfConfig();
             await refreshShelfItems();
             setupDragDropListeners();
+            window.addEventListener('storage', (e) => {
+                if (e.key === 'liquid_glass_variant' && e.newValue !== null) {
+                    const v = parseInt(e.newValue, 10);
+                    if (!Number.isNaN(v) && v !== currentGlassVariant && GLASS_VARIANTS.some(item => item.id === v)) {
+                        currentGlassVariant = v;
+                        currentRefract = null;
+                        currentBlur = null;
+                        currentHighlight = null;
+                        currentArcHeight = null;
+                        updateGlassVariantUI();
+                        syncNativeLiquidGlass();
+                        syncGlassTuning();
+                    }
+                } else if (e.key === 'liquid_glass_dark' && e.newValue !== null) {
+                    isGlassDark = e.newValue === 'true';
+                    updateGlassVariantUI();
+                    syncNativeLiquidGlass();
+                } else if (e.key === 'liquid_glass_refract' || e.key === 'liquid_glass_blur' || e.key === 'liquid_glass_highlight' || e.key === 'liquid_glass_arc_height') {
+                    currentRefract = localStorage.getItem('liquid_glass_refract') !== null ? parseFloat(localStorage.getItem('liquid_glass_refract')) : null;
+                    currentBlur = localStorage.getItem('liquid_glass_blur') !== null ? parseFloat(localStorage.getItem('liquid_glass_blur')) : null;
+                    currentHighlight = localStorage.getItem('liquid_glass_highlight') !== null ? parseFloat(localStorage.getItem('liquid_glass_highlight')) : null;
+                    currentArcHeight = localStorage.getItem('liquid_glass_arc_height') !== null ? parseFloat(localStorage.getItem('liquid_glass_arc_height')) : null;
+                    updateGlassVariantUI();
+                    syncGlassTuning();
+                }
+            });
         });
 
         // 加载配置
@@ -728,8 +1180,9 @@
                     if (typeof cfg.desktop_opacity === 'number') desktopOpacity = cfg.desktop_opacity;
                     isAlwaysOnTop = !!cfg.always_on_top;
                     updatePinUI(isAlwaysOnTop);
-                    const initOp = isAlwaysOnTop ? floatingOpacity : desktopOpacity;
-                    setShelfOpacity(initOp, false, false);
+                    const savedTint = localStorage.getItem('shelf_glass_tint_alpha');
+                    const initOp = savedTint !== null ? parseFloat(savedTint) : 0.0;
+                    setShelfOpacity(Number.isNaN(initOp) ? 0.0 : initOp, false, false);
 
                     if (typeof cfg.hide_header === 'boolean') {
                         isHeaderHidden = cfg.hide_header;
@@ -849,12 +1302,23 @@
             }, 'app_shelf');
 
             // 监听后端原生光标轮询：macOS 对失焦/底层窗口会丢失 mouseleave，
-            // 这里用原生轮询同步"鼠标是否在卡片内"，确保离开后磨砂能按时消退
+            // 这里用原生轮询同步"鼠标是否在卡片内"，确保离开后磨砂能按时消退，并同步光斑坐标
             tauriListen('native-mouse-hover', (event) => {
-                const inside = !!(event && event.payload && event.payload.inside);
+                const payload = (event && event.payload) || {};
+                const inside = !!payload.inside;
+                if (inside && typeof payload.x === 'number' && typeof payload.y === 'number') {
+                    updateGlassSpecularPoint(payload.x, payload.y);
+                }
                 if (inside === isMouseInsideCard) return;
                 isMouseInsideCard = inside;
                 keepActive(3000);
+                syncGlassTuning();
+                if (inside === false) {
+                    // 鼠标离开立即沉回桌面底层（与应用盒一致的逻辑）
+                    try {
+                        window.__TAURI_INTERNALS__.invoke('deactivate_widget_window').catch(() => {});
+                    } catch (_) {}
+                }
             }, 'app_shelf');
 
             // 监听后端派发的实时应用列表更新
@@ -1096,9 +1560,10 @@
             if (pinText) pinText.textContent = pinned ? '常驻桌面 (底层)' : '悬浮置顶 (前台)';
         }
 
-        // 透明度管理
+        // 底色叠加浓度管理 (0.0 = 100% 纯原生 NSGlassEffectView)
         function setShelfOpacity(val, persist = true, animate = false) {
-            const clamped = Math.max(0.05, Math.min(1.0, parseFloat(val) || 0.35));
+            const parsed = parseFloat(val);
+            const clamped = Math.max(0.0, Math.min(0.85, Number.isNaN(parsed) ? 0.0 : parsed));
             currentOpacity = clamped;
             if (isAlwaysOnTop) {
                 floatingOpacity = clamped;
@@ -1117,9 +1582,9 @@
                 }
             }
 
+            document.documentElement.style.setProperty('--glass-tint-alpha', clamped.toString());
             document.documentElement.style.setProperty('--widget-opacity', clamped.toString());
-            const activeOp = Math.min(0.92, Math.max(0.60, clamped * 1.5));
-            document.documentElement.style.setProperty('--widget-active-opacity', activeOp.toString());
+            syncNativeLiquidGlass();
 
             const percent = Math.round(clamped * 100);
             const badge = document.getElementById('opacityBadge');
@@ -1138,6 +1603,7 @@
             });
 
             if (persist) {
+                localStorage.setItem('shelf_glass_tint_alpha', String(clamped));
                 const mode = isAlwaysOnTop ? 'floating' : 'desktop';
                 invoke('set_shelf_mode_opacity', { mode, opacity: clamped }).catch(() => {});
             }
@@ -1149,6 +1615,9 @@
             const popover = document.getElementById('opacityPopover');
             if (!popover) return;
             const isVisible = popover.style.display !== 'none';
+            if (!isVisible) {
+                updateGlassVariantUI();
+            }
             popover.style.display = isVisible ? 'none' : 'flex';
         }
 
@@ -1170,6 +1639,7 @@
         function initTheme() {
             const saved = localStorage.getItem('shelf_theme') || localStorage.getItem('theme') || 'dark';
             document.documentElement.setAttribute('data-theme', saved);
+            syncNativeLiquidGlass();
         }
 
         function toggleTheme(e) {
@@ -1179,6 +1649,7 @@
             const next = cur === 'dark' ? 'light' : 'dark';
             document.documentElement.setAttribute('data-theme', next);
             localStorage.setItem('shelf_theme', next);
+            syncNativeLiquidGlass();
         }
 
         // 关闭/隐藏
