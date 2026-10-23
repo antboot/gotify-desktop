@@ -2094,11 +2094,10 @@ pub fn run() {
                     let _ = window.hide();
                     api.prevent_close();
                 } else if window.label() == "app_shelf" {
-                    let _ = window.hide();
+                    // 允许销毁应用盒窗口，释放其 WebView 进程；设置项记录为关闭
                     let mut cfg = load_app_shelf_config_from_file();
                     cfg.is_open = false;
                     let _ = save_app_shelf_config_to_file(&cfg);
-                    api.prevent_close();
                 }
             }
             tauri::WindowEvent::Focused(focused) => {
@@ -2167,10 +2166,20 @@ pub fn run() {
                         });
                     }
                 } else if window.label() == "app_shelf" {
-                    let mut cfg = load_app_shelf_config_from_file();
-                    cfg.window_x = Some(pos.x);
-                    cfg.window_y = Some(pos.y);
-                    let _ = save_app_shelf_config_to_file(&cfg);
+                    let state: tauri::State<AppState> = window.state();
+                    let token_arc = state.widget_move_debounce_token.clone();
+                    let current_token = token_arc.fetch_add(1, Ordering::SeqCst) + 1;
+                    let target_x = pos.x;
+                    let target_y = pos.y;
+                    tauri::async_runtime::spawn(async move {
+                        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                        if token_arc.load(Ordering::SeqCst) == current_token {
+                            let mut cfg = load_app_shelf_config_from_file();
+                            cfg.window_x = Some(target_x);
+                            cfg.window_y = Some(target_y);
+                            let _ = save_app_shelf_config_to_file(&cfg);
+                        }
+                    });
                 }
             }
             tauri::WindowEvent::Resized(size) => {
@@ -3048,10 +3057,22 @@ pub fn create_app_shelf_window(app: &tauri::AppHandle) -> Result<tauri::WebviewW
 async fn toggle_app_shelf_window(app: tauri::AppHandle) -> Result<bool, String> {
     if let Some(window) = app.get_webview_window("app_shelf") {
         if window.is_visible().unwrap_or(false) {
-            let _ = window.hide();
+            // 关闭时销毁 WebView 释放内存，同时把位置/尺寸持久化以便下次重建
+            let pos = window.outer_position().ok();
+            let size = window.outer_size().ok();
+            let factor = window.scale_factor().unwrap_or(1.0);
             let mut cfg = load_app_shelf_config_from_file();
+            if let Some(p) = pos {
+                cfg.window_x = Some(p.x);
+                cfg.window_y = Some(p.y);
+            }
+            if let Some(s) = size {
+                cfg.window_width = ((s.width as f64) / factor).round() as u32;
+                cfg.window_height = ((s.height as f64) / factor).round() as u32;
+            }
             cfg.is_open = false;
             let _ = save_app_shelf_config_to_file(&cfg);
+            let _ = window.close();
             return Ok(false);
         } else {
             let _ = window.show();
