@@ -67,6 +67,7 @@ mod macos_window {
         fn CGWindowListCopyWindowInfo(option: u32, relative_to_window: u32) -> *mut c_void;
         fn CGMainDisplayID() -> u32;
         fn CGDisplayBounds(display: u32) -> CGRect;
+        fn CGDisplayIsAsleep(display: u32) -> u32;
         fn CGRectMakeWithDictionaryRepresentation(dict: *mut c_void, rect: *mut CGRect) -> u8;
         static kCGWindowNumber: *const c_void;
         static kCGWindowBounds: *const c_void;
@@ -631,6 +632,17 @@ mod macos_window {
         pub y: f64,
     }
 
+    fn occlusion_cache() -> &'static std::sync::Mutex<std::collections::HashMap<usize, (std::time::Instant, bool)>> {
+        static CACHE: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<usize, (std::time::Instant, bool)>>> =
+            std::sync::OnceLock::new();
+        CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+    }
+
+    /// 显示屏是否处于睡眠状态（锁屏/休眠时暂停轮询，避免无意义唤醒）
+    pub fn display_is_asleep() -> bool {
+        unsafe { CGDisplayIsAsleep(CGMainDisplayID()) != 0 }
+    }
+
     /// 获取鼠标相对于该 NSWindow 的客户区坐标（左上角为 0,0）。
     /// 无论窗口是否为 Key/Active Window，该方法都能瞬时返回鼠标相对坐标。
     pub fn get_window_client_mouse_location(ns_window: *mut c_void) -> Option<(f64, f64)> {
@@ -660,7 +672,23 @@ mod macos_window {
                 // NSScreen 坐标（左下原点、y 向上）→ CoreGraphics 坐标（主屏左上原点、y 向下）
                 let main_height = CGDisplayBounds(CGMainDisplayID()).size.height;
                 let cg_point = CGPoint { x: cocoa_x, y: main_height - cocoa_y };
-                if !is_window_topmost_at_point(ns_window, cg_point) {
+                let key = ns_window as usize;
+                let now = std::time::Instant::now();
+                let cached = occlusion_cache()
+                    .lock()
+                    .ok()
+                    .and_then(|m| m.get(&key).copied());
+                let topmost = match cached {
+                    Some((t, v)) if now.duration_since(t) < std::time::Duration::from_millis(200) => v,
+                    _ => {
+                        let v = is_window_topmost_at_point(ns_window, cg_point);
+                        if let Ok(mut m) = occlusion_cache().lock() {
+                            m.insert(key, (now, v));
+                        }
+                        v
+                    }
+                };
+                if !topmost {
                     return None;
                 }
                 Some((client_x, client_y))
@@ -1725,13 +1753,24 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 let mut last_client_pos: [Option<(i32, i32)>; 2] = [None, None];
                 loop {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                    // 显示屏睡眠时暂停轮询，避免无意义的定时唤醒
+                    #[cfg(target_os = "macos")]
+                    if macos_window::display_is_asleep() {
+                        last_client_pos = [None, None];
+                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                        continue;
+                    }
+
+                    let mut any_visible = false;
+                    let mut any_inside = false;
+
                     for (i, label) in ["main", "app_shelf"].iter().enumerate() {
                         let Some(win) = hover_app.get_webview_window(label) else { continue };
                         if !win.is_visible().unwrap_or(false) {
                             last_client_pos[i] = None;
                             continue;
                         }
+                        any_visible = true;
 
                         #[cfg(target_os = "macos")]
                         let loc: Option<(f64, f64)> = win
@@ -1750,6 +1789,7 @@ pub fn run() {
 
                         match loc {
                             Some((cx, cy)) => {
+                                any_inside = true;
                                 let rounded = (cx.round() as i32, cy.round() as i32);
                                 if last_client_pos[i] != Some(rounded) {
                                     last_client_pos[i] = Some(rounded);
@@ -1765,6 +1805,16 @@ pub fn run() {
                             }
                         }
                     }
+
+                    // 自适应轮询：光标在组件内 40ms；组件可见但未悬停 100ms；全部隐藏 500ms
+                    let delay_ms = if !any_visible {
+                        500
+                    } else if any_inside {
+                        40
+                    } else {
+                        100
+                    };
+                    tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
                 }
             });
 
