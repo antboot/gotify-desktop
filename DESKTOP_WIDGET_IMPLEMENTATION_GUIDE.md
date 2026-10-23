@@ -16,7 +16,9 @@
 8. [交互与事件捕获防穿透 (Capture Phase Menu Interception)](#8-交互与事件捕获防穿透-capture-phase-menu-interception)
 9. [Retina 屏幕防膨胀与逻辑像素规则](#9-retina-屏幕防膨胀与逻辑像素规则)
 10. [macOS 本地网络权限与签名避坑 (os error 65)](#10-macos-本地网络权限与签名避坑-os-error-65)
-11. [可直接发给 AI 的标准 Prompt 提示词模板](#11-可直接发给-ai-的标准-prompt-提示词模板)
+11. [原生液态玻璃 NSGlassEffectView（macOS 26+）](#11-原生液态玻璃-nsglasseffectviewmacos-26)
+12. [非激活窗口与焦点态稳定性（反光闪跳根治）](#12-非激活窗口与焦点态稳定性反光闪跳根治)
+13. [可直接发给 AI 的标准 Prompt 提示词模板](#13-可直接发给-ai-的标准-prompt-提示词模板)
 
 ---
 
@@ -209,20 +211,106 @@ window.addEventListener('pointerdown', (e) => {
 ---
 
 ## 10. macOS 本地网络权限与签名避坑 (os error 65)
-针对访问局域网 IP（`192.168.x.x`）的组件应用：
-1. `Info.plist` 注入权限描述：
+针对访问局域网 IP（`192.168.x.x`）的组件应用，macOS 26/27 的 NECP 策略要求**权限声明 + 签名绑定 + 资源密封**三者同时满足，否则内核会以 `EHOSTUNREACH (os error 65: No route to host)` 静默拦截：
+1. `src-tauri/Info.plist` 注入权限描述与 ATS 本地网络豁免：
    ```xml
    <key>NSLocalNetworkUsageDescription</key>
    <string>连接本地 Gotify 服务器以实时接收推送通知</string>
+   <key>NSAppTransportSecurity</key>
+   <dict>
+       <key>NSAllowsArbitraryLoads</key><true/>
+       <key>NSAllowsLocalNetworking</key><true/>
+   </dict>
    ```
-2. 打包后执行深度自签名：
+2. 提供 `src-tauri/Entitlements.plist`：
+   ```xml
+   <key>com.apple.security.network.client</key><true/>
+   ```
+3. 打包后执行**绑定 identifier 的深度签名**（优先使用 Apple Development 证书；无证书时使用带 designated requirement 的 ad-hoc 签名）：
    ```bash
-   codesign --force --deep --sign - --identifier "com.gotify.notifier" "Gotify Notifier.app"
+   codesign --force --deep --sign "$IDENTITY" \
+     --entitlements src-tauri/Entitlements.plist \
+     --identifier "com.gotify.notifier" "Gotify Notifier.app"
    ```
+4. 验证签名确实绑定（而不是仅有签名）：
+   ```bash
+   codesign -dvvv "Gotify Notifier.app" | grep -E "Identifier=|Info.plist|Sealed"
+   # Identifier=com.gotify.notifier
+   # Info.plist entries=16
+   # Sealed Resources version=2 rules=13 files=1
+   codesign --verify --deep --strict --verbose=2 "Gotify Notifier.app"
+   ```
+5. 覆盖安装到 `/Applications` 后清理隔离属性并刷新 LaunchServices，始终从 `/Applications` 启动：
+   ```bash
+   xattr -cr "/Applications/Gotify Notifier.app"
+   /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "/Applications/Gotify Notifier.app"
+   ```
+6. **双网卡同网段冲突**：若 `en0` 与 `en9` 同时处于 `192.168.x.0/24`，macOS 27 会把流量固定到服务顺序更高的网卡；该网卡断开时不会自动改走另一张，直接报 `No route to host`。禁用闲置网卡或在「系统设置 → 网络 → 服务顺序」中调整即可。
+7. 完整排查记录见仓库根目录 [network-connection-fix.md](network-connection-fix.md)。
 
 ---
 
-## 11. 可直接发给 AI 的标准 Prompt 提示词模板
+## 11. 原生液态玻璃 NSGlassEffectView（macOS 26+）
+
+CSS `backdrop-filter` 无法复刻 Apple 真实玻璃透镜。macOS 26+ 可直接嵌入系统 `NSGlassEffectView`：
+
+```objc
+Class GlassCls = NSClassFromString(@"NSGlassEffectView");
+NSView *glassView = [[GlassCls alloc] initWithFrame:contentView.bounds];
+[glassView setValue:@(20.0) forKey:@"cornerRadius"];
+[contentView addSubview:glassView positioned:NSWindowBelow relativeTo:nil]; // 放在 WebView 下面
+```
+
+要点：
+1. **WebView 必须透明**，玻璃层才能透出桌面与后方窗口。
+2. **重建判定**：把 `variant / radius / inset` 存入窗口与玻璃视图的 associated object，参数变化才重建，否则复用现有视图。
+3. **私有光学参数**（backdrop 的 `filters.glassBackground.*`）：
+   - `inputInnerRefractionAmount` / `inputOuterRefractionAmount`：透镜折射曲率
+   - `inputBlurRadius`：模糊（0 = 水晶水滴）
+   - `inputKeyFillHighlightAmount` / `inputBlurFillLightenOpacity`：边缘高光与填充
+   - `inputLumaNoiseScale`：纹理噪点
+   - `CASDFLayer` 镜面层（`@2` / `@3`）：`opacity ≈ 0.75 × 反光系数`
+4. **持久化用户调优**：反光、折射、模糊、弧高写入 associated object，防止 Apple 内部重建图层后丢失。
+5. **焦点/外观变化后的恢复**：Apple 会在窗口获焦/失焦时重写高光。可 swizzle `-[NSGlassEffectView _windowChangedKeyState]`，并在 30/120/400/900ms 异步重刷用户参数；必要时以 16ms 守卫循环持续约 640ms 压住设定值。
+6. `subduedState` 固定为 `0`；如系统仍会变暗/脉冲，可把 `scrimState`、`interactionState` 一并锁定为 `0`。
+7. 参数快速切换时递归清理 CALayer 动画（`removeAllAnimations`），避免过渡拖影。
+8. NSGlassEffectView 仅 macOS 26+ 可用，需用 `NSClassFromString` 探测并回退到 CSS 玻璃。
+
+---
+
+## 12. 非激活窗口与焦点态稳定性（反光闪跳根治）
+
+### 12.1 典型症状
+点击任一小组件时，它的镜面反光会“跳”一下；同时另一个小组件也会跟着闪/联动。
+
+### 12.2 根因
+点击会激活 App，AppKit 随后需要指定一个 Key Window。仅在**被点击的窗口**上返回 `canBecomeKeyWindow = NO` 并不能阻止激活流程 —— 系统会绕过它，把同一 App 的**另一个窗口**设为 Key。该窗口收到 `windowDidBecomeKey` 后，`NSGlassEffectView` 会按“焦点态”重绘高光，于是出现闪跳，并导致两个组件互相联动。
+
+### 12.3 正确做法：让小组件窗口永不参与 App 激活
+对每个被纳管的小组件窗口（底层与置顶两种形态都要）执行：
+```rust
+let nonact = sel_registerName(b"_setNonactivatingPanel:\0".as_ptr() as _);
+msg_usize(win, nonact, 1);
+let prev = sel_registerName(b"_setPreventsActivation:\0".as_ptr() as _);
+msg_usize(win, prev, 1);
+```
+同时：
+- `canBecomeKeyWindow` / `canBecomeMainWindow` 保持返回 `NO`；
+- 小组件窗口禁止调用 `NSApp.activateIgnoringOtherApps:`、`makeKeyAndOrderFront:` 或 Tauri `set_focus()`。
+
+### 12.4 验证标准
+- Rust 侧 `WindowEvent::Focused` 对小组件窗口**永不触发**；
+- 点击后 `[window isKeyWindow] == false`；
+- 代价：小组件无法获得键盘输入，所有交互需保持鼠标可完成（拖拽、滑杆、右键菜单）；设置窗口仍可作为普通 Key Window。
+
+### 12.5 沉底逻辑要跟着改
+窗口不再有焦点事件后，不能再用 `Focused(false)` 触发沉底。应改为：
+- 鼠标离开组件时（原生 50ms 光标轮询）**立即**把窗口沉回桌面层级；
+- 玻璃“激活高光”状态可继续保持约 3 秒后平滑褪去。
+
+---
+
+## 13. 可直接发给 AI 的标准 Prompt 提示词模板
 
 ```markdown
 请帮我将当前应用实现为极具苹果质感的“纯桌面小组件”模式，严格遵循以下全套工程规范：
@@ -244,5 +332,12 @@ window.addEventListener('pointerdown', (e) => {
 - macOS 端：底层模式精准 Level -1，禁用 hasShadow, isOpaque，设置 clearColor 并隐藏交通灯按钮；
 - Windows 端：置顶模式显式注入 WS_EX_TOPMOST 并设置 HWND_TOPMOST；
 - 拖拽与点击互斥，在 window 捕获阶段拦截 pointerdown，保证点击卡片空白或拖拽时右键菜单能立即收起；
-- 支持无焦点全局光标悬停检测 (native-mouse-hover)，光标划过通知卡片自动平滑标记已阅。
+- 支持无焦点全局光标悬停检测 (native-mouse-hover)，光标划过通知卡片自动平滑标记已阅；
+- 小组件窗口使用非激活面板（_setNonactivatingPanel / _setPreventsActivation），绝不成为 Key Window，点击时禁止触发系统焦点态玻璃重绘；
+- 鼠标离开组件时立即沉回桌面层级，玻璃高光状态延迟约 3 秒后褪去。
+
+【4. 原生液态玻璃（macOS 26+）】
+- 嵌入系统 NSGlassEffectView，WebView 保持透明，玻璃层置于其下；
+- 暴露折射、模糊、反光亮度、反光厚度等可调参数，并持久化到本地配置；
+- 在窗口焦点/外观变化后用异步重刷恢复用户参数，禁止在 AppKit 回调中同步执行 CATransaction flush（会死锁）。
 ```

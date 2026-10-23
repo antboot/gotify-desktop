@@ -93,11 +93,29 @@ codesign -dvvv "/Applications/Gotify Notifier.app"
 
 修改代码后，直接运行：
 ```bash
-./build.sh
+./build.sh          # Release 构建 + 签名 + 打包 DMG + 自动覆盖安装到 /Applications
+./build.sh --run    # 构建完成后立即启动
 ```
-构建脚本会自动完成编译和规范签名。若需要覆盖系统应用程序，只需执行：
+
+构建脚本会优先使用本机 `Apple Development` / `Developer ID Application` 证书，附带
+`src-tauri/Entitlements.plist` 网络权限并绑定 `com.gotify.notifier`；无证书时回退到带
+designated requirement 的 ad-hoc 签名。
+
+安装完成后**务必从 `/Applications` 启动**（不要直接运行 `target/release/bundle` 下的副本），
+并确认签名已密封：
+
 ```bash
-rm -rf "/Applications/Gotify Notifier.app"
-cp -R "src-tauri/target/release/bundle/macos/Gotify Notifier.app" "/Applications/"
-codesign --force --deep --sign - --identifier "com.gotify.notifier" "/Applications/Gotify Notifier.app"
+codesign -dvvv "/Applications/Gotify Notifier.app" | grep -E "Identifier=|Info.plist|Sealed"
+# Identifier=com.gotify.notifier
+# Info.plist entries=16
+# Sealed Resources version=2 rules=13 files=1
+codesign --verify --deep --strict --verbose=2 "/Applications/Gotify Notifier.app"
+# valid on disk / satisfies its Designated Requirement
 ```
+
+### 验证结果（2026-10）
+
+- 使用 `Apple Development: 475614239@qq.com (V57CRU8B34)` 签名后，安装到 `/Applications` 启动，
+  WebSocket 与设置页「测试连接」均正常，`os error 65` 不再出现。
+- 若仍失败，请优先检查：① 是否从 `/Applications` 启动；② 是否被旧的 ad-hoc 副本抢占；
+  ③ 「系统设置 → 隐私与安全性 → 本地网络」中是否已授权当前 App；④ 是否存在双网卡同网段冲突。

@@ -15,6 +15,8 @@ Use this skill whenever building, refactoring, or optimizing a desktop widget ap
 - Making transparent windows free from black rectangular corner shadows, halo cutoffs, or color-shifting glitches.
 - Operating as a pure background service (MenuBar / Status Bar only, hidden from Dock by default) with runtime Dock toggle.
 - Enabling mouse hover detection on background/unfocused windows without requiring the user to click or focus the window.
+- Embedding Apple's **native `NSGlassEffectView` liquid glass** (macOS 26+) with custom refraction / blur / specular tuning.
+- Eliminating **focus-state glass flashes** and cross-widget linkage caused by AppKit key-window assignment.
 - Resolving macOS 15+ / 27 Local Network Privacy restrictions (`os error 65: No route to host`).
 
 ---
@@ -162,7 +164,18 @@ fn set_show_in_dock(app: tauri::AppHandle, enabled: bool) -> Result<(), String> 
 ### 4.1 The Problem
 When a desktop widget is in Level `-1` or accessory mode, it does **not** have active key window focus. Standard WebKit `:hover` and `onmouseenter` will fail to fire as the user moves their cursor over notifications.
 
-### 4.2 The Solution: Hybrid NSTrackingArea & Cursor Polling
+### 4.2 Occlusion-Aware Cursor Polling ( Recommended )
+Unfocused/Low-level windows frequently lose `mouseenter`/`mouseleave`; poll the cursor every ~50 ms instead.
+Also verify the cursor is not covered by another app, otherwise "hover" fires under overlapping windows:
+```rust
+// CGWindowListCopyWindowInfo returns windows front-to-back.
+// The first window whose bounds contain the cursor must be ours.
+// Skip: alpha <= 0.001 (invisible helpers) and layer >= 20 (Dock's full-screen transparent window).
+let topmost_is_ours = /* front-to-back scan */;
+```
+Without the `layer >= 20` / `alpha ~ 0` filters the widget will *never* count as hovered on a normal desktop, because the Dock owns a full-screen transparent window above it.
+
+### 4.3 The Solution: Hybrid NSTrackingArea & Cursor Polling
 1. Register `NSTrackingArea` with `NSTrackingActiveAlways`:
    ```objc
    NSTrackingAreaOptions options = NSTrackingMouseMoved | 
@@ -175,6 +188,19 @@ When a desktop widget is in Level `-1` or accessory mode, it does **not** have a
    window.emit("native-mouse-hover", json!({ "x": cx, "y": cy }));
    ```
 3. Frontend uses `document.elementFromPoint(x, y)` to trigger card hover effects and mark unread items as read even without window focus!
+
+---
+
+### 4.4 Multi-Widget Event Isolation (Tauri)
+`emit_to(window_label, ...)` only filters listeners that were registered with an explicit target.
+A JS listener created with the default `{ kind: 'Any' }` receives events from **all** windows, so two widgets cross-trigger each other:
+```js
+// WRONG: receives the other widget's focus/hover events too
+await listen('widget-focus', handler);
+
+// RIGHT:
+await listen('widget-focus', handler, { target: { kind: 'WebviewWindow', label: 'app_shelf' } });
+```
 
 ---
 
@@ -276,7 +302,120 @@ For apps connecting to LAN IP addresses (e.g. `192.168.x.x`):
   <key>NSLocalNetworkUsageDescription</key>
   <string>Gotify Notifier connects to your local Gotify server to receive real-time notifications.</string>
   ```
-- Sign the app bundle:
-  ```bash
-  codesign --force --deep --sign - --identifier "com.gotify.notifier" "Gotify Notifier.app"
+- Also add ATS local networking:
+  ```xml
+  <key>NSAppTransportSecurity</key>
+  <dict>
+      <key>NSAllowsArbitraryLoads</key><true/>
+      <key>NSAllowsLocalNetworking</key><true/>
+  </dict>
   ```
+- Sign the app bundle with a stable identifier **and an entitlements file**:
+  ```bash
+  codesign --force --deep --sign "$IDENTITY" \
+    --entitlements src-tauri/Entitlements.plist \
+    --identifier "com.gotify.notifier" "Gotify Notifier.app"
+  ```
+  `Entitlements.plist` should contain `com.apple.security.network.client` (and `network.server` if needed).
+- Verify the signature is actually *bound*, not just present:
+  ```bash
+  codesign -dvvv "Gotify Notifier.app" | grep -E "Identifier=|Info.plist|Sealed Resources"
+  # Identifier=com.gotify.notifier
+  # Info.plist entries=16
+  # Sealed Resources version=2 rules=13 files=1
+  codesign --verify --deep --strict --verbose=2 "Gotify Notifier.app"
+  ```
+  If you see `Info.plist=not bound` / `Sealed Resources=none`, macOS 27 NECP will silently block LAN sockets with `EHOSTUNREACH (os error 65)` even when Local Network permission is enabled.
+- **Run the app from `/Applications`**, not from `target/debug|release/bundle`, after signing. Re-register with LaunchServices after replacing it:
+  ```bash
+  xattr -cr "/Applications/Gotify Notifier.app"
+  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "/Applications/Gotify Notifier.app"
+  ```
+- **Dual NIC same-subnet conflict**: if two interfaces share `192.168.x.0/24`, macOS 27 pins traffic to the higher-priority service and returns `No route to host` when that NIC is unplugged. Disable the unused NIC or fix the service order.
+
+---
+
+## 9. Native Liquid Glass: `NSGlassEffectView` (macOS 26+)
+
+`backdrop-filter` cannot reproduce Apple's real glass lens. On macOS 26+ you can embed the system view:
+
+```objc
+Class GlassCls = NSClassFromString(@"NSGlassEffectView");
+NSView *glassView = [[GlassCls alloc] initWithFrame:contentView.bounds];
+[glassView setValue:@(20.0) forKey:@"cornerRadius"];   // squircle radius
+[contentView addSubview:glassView positioned:NSWindowBelow relativeTo:nil]; // BELOW the webview
+```
+
+Key rules:
+1. **Webview must be transparent** (`setValue:@NO forKey:@"drawsBackground"`, clear background) so the glass below shows through.
+2. **Rebuild detection**: store `variant/radius/inset` in `objc_setAssociatedObject` on both the window and the glass view; rebuild when they differ, otherwise reuse.
+3. **Private optical knobs** live on the backdrop layer (`CALayer` sublayer) filters:
+   - `filters.glassBackground.inputInnerRefractionAmount`, `inputOuterRefractionAmount` – lens curvature
+   - `inputBlurRadius` – blur (0 = crystal clear droplet)
+   - `inputKeyFillHighlightAmount`, `inputBlurFillLightenOpacity` – edge light / fill
+   - `inputLumaNoiseScale`, arc height – texture & arc
+   - `CASDFLayer` specular sublayers (`@2`, `@3`): `opacity ≈ 0.75 * highlightMultiplier`
+4. **Persist user tuning** as associated objects (`highlight`, `refraction`, `blur`, `arcHeight`) so it survives Apple's internal layer rebuilds.
+5. **Restoring after focus/appearance changes**: Apple rewrites the highlight when the window becomes/resigns key. Swizzle `-[NSGlassEffectView _windowChangedKeyState]` and re-apply the user's tuning asynchronously (e.g. at 30/120/400/900 ms) plus a 16 ms guard loop for ~640 ms.
+6. Keep `subduedState` pinned to `0`, and force `scrimState` / `interactionState` to `0` if the OS dims or pulses the panel.
+7. Kill stray CA transitions when snapping parameters:
+   ```objc
+   for (CALayer *l in layer.sublayers) { [l removeAllAnimations]; recurse(l); }
+   ```
+8. NSGlassEffectView is **macOS 26+ only** — guard with `NSClassFromString` and fall back to CSS glass on older systems.
+
+---
+
+## 10. Non-Activating Widget Windows (critical for desktop widgets)
+
+### 10.1 Symptom
+Clicking a widget makes its specular highlight flash, **and the other widget's glass flashes too** (cross-widget linkage).
+
+### 10.2 Root cause
+Clicking activates the app. AppKit then needs a key window. `canBecomeKeyWindow → NO` on the clicked window is **not enough** — during activation AppKit may bypass it and assign key status to another window of the same app. That window receives `windowDidBecomeKey`, and `NSGlassEffectView` re-renders the focus-state highlight (a visible jump), while your top-level tuning gets temporarily replaced by Apple's defaults.
+
+### 10.3 Fix: prevent activation entirely
+On every managed widget window (both desktop-pinned and floating):
+```rust
+let nonact = sel_registerName(b"_setNonactivatingPanel:\0".as_ptr() as _);
+msg_usize(win, nonact, 1);
+let prev = sel_registerName(b"_setPreventsActivation:\0".as_ptr() as _);
+msg_usize(win, prev, 1);
+```
+Keep `canBecomeKeyWindow` / `canBecomeMainWindow` returning `NO`, and never call `NSApp.activateIgnoringOtherApps:`, `makeKeyAndOrderFront:` or Tauri `set_focus()` for these windows.
+
+### 10.4 Verify
+- Tauri `WindowEvent::Focused` must never fire for widget windows.
+- `[window isKeyWindow] == false` after clicking.
+- Consequence: widgets never receive keyboard input — keep all widget UI mouse-driven (drag, sliders, context menus). A separate Settings window can still be a normal key window.
+
+### 10.5 Consequence for "sinking"
+Because focus/resign events no longer fire, do **not** rely on `Focused(false)` to drop the window back to desktop level. Sink explicitly:
+- on cursor leave (from the 50 ms hover poller), or
+- after an idle timer.
+Keeping the "glass active" state for ~3 s while sinking the z-order immediately on mouse-leave feels best.
+
+---
+
+## 11. Deadlock & Re-entrancy Rules for AppKit Callbacks
+
+1. **Never call `[CATransaction flush]` synchronously inside an AppKit callback.** Key-state / appearance callbacks run inside the event loop; flushing re-enters tao/wry redraw and deadlocks against the event-loop mutex. The app freezes completely with 100% CPU on one thread.
+   - Apply parameters immediately with `flush = NO` (same transaction), then schedule follow-up applies on later runloop turns (`dispatch_after`) with `flush = YES`.
+2. **Re-entrancy guard.** Tuning code usually calls `set_subduedState:`, whose swizzle calls back into tuning → infinite recursion/stack overflow. Use a static `BOOL applying` flag.
+3. **Do not call the original** `_windowChangedKeyState` if you fully own the appearance; call it only if you want Apple's default focus styling.
+4. Diagnose hangs with `sample <pid> 2 -file /tmp/hang.txt` or `~/Library/Logs/DiagnosticReports/*.ips`; `lldb -p` is often blocked on hardened apps.
+
+---
+
+## 12. Build-System Pitfalls
+
+- The `cc` crate does **not** track `.m` sources by default. Without
+  ```rust
+  println!("cargo:rerun-if-changed=src/macos_app_info.m");
+  ```
+  in `build.rs`, Objective-C edits silently reuse stale object files — you can spend hours debugging code that was never compiled.
+- Launch the built binary directly to capture stdout/stderr:
+  ```bash
+  nohup "path/App.app/Contents/MacOS/app" > /tmp/app.log 2>&1 &
+  ```
+- After changing window/signature metadata, re-run `lsregister` and launch from `/Applications`.

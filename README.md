@@ -35,7 +35,9 @@
 
 - 🪟 **专注纯粹的桌面小组件架构 (Pure Desktop Widget)**
   - **原生沉底**：基于 macOS Cocoa 底层窗口优化（Level `-1`），小组件始终安静沉在壁纸上，绝不遮挡 **台前调度（Stage Manager）** 的缩略图与应用窗口。
-  - **Apple 原生液态玻璃美学**：Squircle 连续大圆角、精细内发光浮雕、多级高斯毛玻璃效果，完美契合 macOS 现代设计规范。
+  - **Apple 原生液态玻璃（macOS 26+）**：直接嵌入系统 `NSGlassEffectView`，还原真实水滴透镜折射、边缘高光与 Squircle 连续大圆角；内置 4 套原生光学预设，并可无级调节**折射弧度、模糊、反光亮度、反光厚度**。
+  - **零焦点闪烁**：小组件采用非激活窗口（不抢 App 焦点、不成为 Key Window），点击、切换窗口时反光不再闪跳；主组件与应用盒完全独立、互不干扰。
+  - **即移即沉**：鼠标离开组件立即沉回桌面底层，玻璃高光状态保持约 3 秒后平滑褪去，不遮挡任何正常工作窗口。
   - **随心摆放**：支持自由拖拽小组件到桌面任意角落，自动防抖记忆窗口坐标与状态。
 
 - 💧 **置顶前台与常驻桌面双形态 · 智能双透明度系统**
@@ -62,9 +64,14 @@
 
 ## 🚀 下载与安装 (Installation)
 
+### 系统要求
+- **macOS 26+（Apple Silicon）**：原生液态玻璃依赖 `NSGlassEffectView`，推荐 macOS 26 / 27。
+- **Windows 10/11 (x64)**：使用下方预编译安装包。
+- 源码构建需要 Rust >= 1.77.2 与 Node.js 18+。
+
 ### 方式一：直接下载安装包（推荐）
 前往 [Releases 页面](https://github.com/antboot/gotify-desktop/releases/latest) 下载适用于你系统的预编译安装包：
-- **macOS (Apple Silicon & Intel)**：下载 `.dmg` 文件，拖入 `Applications` 即可使用。
+- **macOS (Apple Silicon)**：下载 `.dmg` 文件，拖入 `Applications` 即可使用（已使用开发者证书签名，可正常通过本地网络权限）。
 - **Windows**：下载 `Gotify_Notifier_*_x64-setup.exe`（安装引导版）、`.msi`（企业安装版）或 `.zip`（便携免安装绿色版）。
 
 ### 方式二：源码构建
@@ -79,9 +86,12 @@ cd gotify-desktop
 # 2. 运行开发模式
 npx @tauri-apps/cli dev
 
-# 3. 构建正式发行版
-npx @tauri-apps/cli build
+# 3. 构建正式发行版（推荐使用脚本：自动签名、密封资源并安装）
+./build.sh          # Release 构建 + 签名 + 打包 DMG + 安装到 /Applications
+./build.sh --run    # 构建完成后立即启动
 ```
+
+> ⚠️ **macOS 局域网连接必读**：macOS 26/27 的本地网络隐私（NECP）要求 App 声明 `NSLocalNetworkUsageDescription`，且签名必须绑定 `com.gotify.notifier` 并密封 Info.plist，否则会报 `os error 65: No route to host`。请务必使用 `./build.sh` 构建，并参考 [network-connection-fix.md](network-connection-fix.md)。
 
 构建生成的安装包位于 `src-tauri/target/release/bundle/` 目录下。
 
@@ -106,6 +116,7 @@ export GOTIFY_CLIENT_TOKEN="your_token_here"
 ## 📚 延伸技术指南与 Skills
 - [桌面小组件架构设计与 AI 提示词指南](DESKTOP_WIDGET_IMPLEMENTATION_GUIDE.md)
 - [macOS 桌面小组件工程 Skills](.agents/skills/macos-transparent-desktop-widget/SKILL.md)
+- [macOS 本地网络连接失败修复文档（os error 65）](network-connection-fix.md)
 - [GitHub Actions 多平台自动编译指南](GITHUB_ACTIONS_GUIDE.md)
 
 ---
