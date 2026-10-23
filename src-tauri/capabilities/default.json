@@ -20,7 +20,6 @@
     "notification:allow-request-permission",
     "notification:allow-notify",
     "notification:allow-show",
-    "shell:default",
     "shell:allow-open"
   ]
 }

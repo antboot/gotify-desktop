@@ -2195,6 +2195,7 @@ pub fn run() {
             test_settings_window,
             get_system_theme,
             get_auto_launch,
+            report_js_error,
             set_auto_launch,
             get_show_in_dock,
             set_show_in_dock,
@@ -2258,6 +2259,25 @@ fn get_auto_launch() -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(target_os = "macos")]
+fn escape_applescript_string(input: &str) -> String {
+    input.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+#[cfg(target_os = "macos")]
+fn escape_xml_text(input: &str) -> String {
+    input
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
+#[tauri::command]
+fn report_js_error(message: String) {
+    eprintln!("🪲 [JS] {}", message);
+}
+
 #[tauri::command]
 fn set_auto_launch(enabled: bool) -> Result<(), String> {
     let config_dir = get_config_dir();
@@ -2279,7 +2299,7 @@ fn set_auto_launch(enabled: bool) -> Result<(), String> {
             // 通过 AppleScript 添加到登录项（显示在系统设置的登录项中）
             let script = format!(
                 "tell application \"System Events\" to make login item at end with properties {{path:\"{}\", hidden:false}}",
-                bundle_path
+                escape_applescript_string(&bundle_path)
             );
             let result = std::process::Command::new("osascript")
                 .args(&["-e", &script])
@@ -2315,7 +2335,7 @@ fn set_auto_launch(enabled: bool) -> Result<(), String> {
 </dict>
 </plist>"#,
                 label,
-                bundle_path
+                escape_xml_text(&bundle_path)
             );
             let _ = std::fs::write(&plist_path, &plist);
         } else {
@@ -2328,7 +2348,7 @@ fn set_auto_launch(enabled: bool) -> Result<(), String> {
             let result = std::process::Command::new("osascript")
                 .args(&["-e", &format!(
                     "tell application \"System Events\" to delete login item \"{}\"",
-                    name
+                    escape_applescript_string(&name)
                 )])
                 .output()
                 .map_err(|e| format!("移除开机启动失败: {}", e))?;

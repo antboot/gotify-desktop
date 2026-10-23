@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 
 <head>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; font-src 'self' data:; media-src 'self' data: http: https:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'self'; form-action 'none'; frame-src 'none'">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>桌面应用盒</title>
@@ -798,7 +799,7 @@
 
     <!-- Tauri v2 事件 API -->
     <script type="module">
-        import { listen } from 'https://cdn.jsdelivr.net/npm/@tauri-apps/api@2/event.js';
+        import { listen } from './tauri-events.js';
         window.__TAURI_LISTEN__ = listen;
     </script>
 
@@ -1276,9 +1277,6 @@
             const options = targetLabel ? { target } : undefined;
             if (typeof window.__TAURI_LISTEN__ === 'function') {
                 return window.__TAURI_LISTEN__(eventName, cb, options);
-            }
-            if (window.__TAURI__ && window.__TAURI__.event && typeof window.__TAURI__.event.listen === 'function') {
-                return window.__TAURI__.event.listen(eventName, cb, options);
             }
             if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke && window.__TAURI_INTERNALS__.transformCallback) {
                 return window.__TAURI_INTERNALS__.invoke('plugin:event|listen', {

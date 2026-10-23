@@ -962,12 +962,15 @@
         })();
     </script>
     <!-- Tauri API 初始化脚本 - 必须在所有脚本之前加载 -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; font-src 'self' data:; media-src 'self' data: http: https:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'self'; form-action 'none'; frame-src 'none'">
+    <script src="js-errors.js"></script>
     <script src="lang.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="vendor/marked.umd.js"></script>
+    <script src="vendor/purify.min.js"></script>
 
     <!-- Tauri v2 事件 API -->
     <script type="module">
-        import { listen } from 'https://cdn.jsdelivr.net/npm/@tauri-apps/api@2/event.js';
+        import { listen } from './tauri-events.js';
         window.__TAURI_LISTEN__ = listen;
     </script>
 
@@ -2023,6 +2026,18 @@
 
         // DOM 加载完成与事件监听绑定
         document.addEventListener('DOMContentLoaded', async () => {
+            const widgetMessageList = document.getElementById('widgetMessageList');
+            if (widgetMessageList) {
+                widgetMessageList.addEventListener('click', (e) => {
+                    const a = e.target && e.target.closest ? e.target.closest('a') : null;
+                    if (!a) return;
+                    const href = a.getAttribute('data-href') || a.getAttribute('href') || '';
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openUrl(href, e);
+                }, true);
+            }
+
             await new Promise(resolve => setTimeout(resolve, 80));
 
             if (typeof window.__TAURI_INTERNALS__ !== 'undefined') {
@@ -2229,9 +2244,9 @@
         }
 
         function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
+            return String(text == null ? '' : text).replace(/[&<>"']/g, m => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[m]);
         }
 
         marked.setOptions({
@@ -2242,31 +2257,60 @@
         });
 
         const renderer = new marked.Renderer();
-        renderer.link = (href, title, text) => {
-            if (typeof href === 'object') {
-                const { href: linkHref, title: linkTitle, text: linkText } = href;
-                return `<a href="${linkHref}" title="${linkTitle || ''}" onclick="openUrl('${linkHref}', event)">${linkText}</a>`;
+        renderer.link = function(token, title, text) {
+            let href, label;
+            if (token && typeof token === 'object') {
+                href = token.href;
+                label = token.text;
+            } else {
+                href = token;
+                label = text;
             }
-            return `<a href="${href}" title="${title || ''}" onclick="openUrl('${href}', event)">${text}</a>`;
+            const safeHref = escapeHtml(href || '');
+            return `<a href="${safeHref}" data-href="${safeHref}" rel="noopener noreferrer">${escapeHtml(label || '')}</a>`;
         };
         marked.use({ renderer });
+
+        function safeExternalUrl(raw) {
+            try {
+                const u = new URL(String(raw || ''), window.location.href);
+                if (['http:', 'https:', 'mailto:'].includes(u.protocol)) return u.href;
+            } catch (_) {}
+            return null;
+        }
 
         async function openUrl(url, event) {
             if (event) {
                 event.preventDefault();
                 event.stopPropagation();
             }
+            const safe = safeExternalUrl(url);
+            if (!safe) {
+                console.warn('Blocked unsafe URL scheme:', url);
+                return;
+            }
             if (typeof window.__TAURI_INTERNALS__ === 'undefined') {
-                window.open(url, '_blank');
+                window.open(safe, '_blank');
                 return;
             }
             try {
                 const { invoke } = window.__TAURI_INTERNALS__;
-                await invoke('plugin:shell|open', { path: url });
+                await invoke('plugin:shell|open', { path: safe });
             } catch (error) {
                 console.error('Failed to open URL:', error);
-                window.open(url, '_blank');
             }
+        }
+
+        const PURIFY_CONFIG = {
+            ADD_ATTR: ['data-href'],
+            FORBID_TAGS: ['style', 'form', 'iframe', 'object', 'embed', 'link', 'meta', 'base'],
+            FORBID_ATTR: ['style'],
+            ALLOW_DATA_ATTR: false
+        };
+
+        function sanitizeHtml(html) {
+            if (typeof DOMPurify === 'undefined') return escapeHtml(html);
+            return DOMPurify.sanitize(html, PURIFY_CONFIG);
         }
 
         function renderMessage(notif) {
@@ -2278,15 +2322,19 @@
                 notif.extras['client::display'].contentType === 'text/markdown';
 
             if (isMarkdown) {
-                return marked.parse(notif.message);
+                try {
+                    return sanitizeHtml(marked.parse(notif.message));
+                } catch (e) {
+                    console.warn('Markdown render failed, fallback to text:', e);
+                }
             }
 
             let html = escapeHtml(notif.message).replace(/\n/g, '<br>');
             const urlRegex = /(https?:\/\/[^\s]+)/g;
             html = html.replace(urlRegex, (url) => {
-                return `<a href="${url}" onclick="openUrl('${url}', event)">${url}</a>`;
+                return `<a href="${url}" data-href="${url}" rel="noopener noreferrer">${url}</a>`;
             });
-            return html;
+            return sanitizeHtml(html);
         }
 
         let lastConnectionStatus = null;
