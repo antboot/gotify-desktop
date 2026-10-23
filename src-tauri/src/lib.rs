@@ -2805,6 +2805,9 @@ pub struct AppShelfItem {
     pub id: String,
     pub name: String,
     pub path: String,
+    #[serde(default)]
+    pub icon_path: Option<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub icon_data: String,
     pub added_at: u64,
 }
@@ -2841,11 +2844,41 @@ impl Default for AppShelfConfig {
     }
 }
 
+fn shelf_icon_dir() -> std::path::PathBuf {
+    std::path::PathBuf::from(get_config_dir()).join(".gotify_icons")
+}
+
+fn write_shelf_icon(id: &str, data_url: &str) -> Option<String> {
+    use base64::Engine;
+    let raw = data_url.split_once(',').map(|(_, b)| b).unwrap_or(data_url);
+    let bytes = base64::prelude::BASE64_STANDARD.decode(raw).ok()?;
+    if bytes.is_empty() { return None; }
+    let dir = shelf_icon_dir();
+    std::fs::create_dir_all(&dir).ok()?;
+    let file = dir.join(format!("{}.png", id));
+    std::fs::write(&file, bytes).ok()?;
+    Some(file.to_string_lossy().to_string())
+}
+
 fn load_app_shelf_items_from_file() -> Vec<AppShelfItem> {
     let config_dir = get_config_dir();
     let path = format!("{}/.gotify_app_shelf.json", config_dir);
     if let Ok(content) = std::fs::read_to_string(&path) {
-        if let Ok(items) = serde_json::from_str::<Vec<AppShelfItem>>(&content) {
+        if let Ok(mut items) = serde_json::from_str::<Vec<AppShelfItem>>(&content) {
+            // 一次性迁移：把历史 base64 图标落盘，后续只保存文件路径
+            let mut migrated = false;
+            for item in items.iter_mut() {
+                if item.icon_path.is_none() && !item.icon_data.is_empty() {
+                    if let Some(p) = write_shelf_icon(&item.id, &item.icon_data) {
+                        item.icon_path = Some(p);
+                        item.icon_data.clear();
+                        migrated = true;
+                    }
+                }
+            }
+            if migrated {
+                let _ = save_app_shelf_items_to_file(&items);
+            }
             return items;
         }
     }
@@ -2855,7 +2888,7 @@ fn load_app_shelf_items_from_file() -> Vec<AppShelfItem> {
 fn save_app_shelf_items_to_file(items: &[AppShelfItem]) -> Result<(), String> {
     let config_dir = get_config_dir();
     let path = format!("{}/.gotify_app_shelf.json", config_dir);
-    let json = serde_json::to_string_pretty(items)
+    let json = serde_json::to_string(items)
         .map_err(|e| format!("序列化应用盒失败: {}", e))?;
     std::fs::write(&path, json).map_err(|e| format!("写入应用盒配置失败: {}", e))
 }
@@ -3060,11 +3093,15 @@ fn add_apps_to_shelf(paths: Vec<String>) -> Result<Vec<AppShelfItem>, String> {
         let icon_data = get_app_icon_data_url(&path);
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
         let id = format!("{}_{}", now.as_millis(), items.len());
+        let icon_path = write_shelf_icon(&id, &icon_data);
+        // 已落盘则不再把 base64 写进配置，避免配置膨胀
+        let icon_data = if icon_path.is_some() { String::new() } else { icon_data };
 
         items.push(AppShelfItem {
             id,
             name,
             path,
+            icon_path,
             icon_data,
             added_at: now.as_secs(),
         });
@@ -3077,6 +3114,11 @@ fn add_apps_to_shelf(paths: Vec<String>) -> Result<Vec<AppShelfItem>, String> {
 #[tauri::command]
 fn remove_app_from_shelf(id: String) -> Result<Vec<AppShelfItem>, String> {
     let mut items = load_app_shelf_items_from_file();
+    if let Some(item) = items.iter().find(|it| it.id == id) {
+        if let Some(icon) = item.icon_path.as_ref() {
+            let _ = std::fs::remove_file(icon);
+        }
+    }
     items.retain(|it| it.id != id);
     save_app_shelf_items_to_file(&items)?;
     Ok(items)

@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 
 <head>
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; font-src 'self' data:; media-src 'self' data: http: https:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'self'; form-action 'none'; frame-src 'none'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: asset: http: https:; font-src 'self' data:; media-src 'self' data: http: https:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'self'; form-action 'none'; frame-src 'none'">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>桌面应用盒</title>
@@ -1226,7 +1226,7 @@
 
             grid.style.display = 'grid';
             grid.innerHTML = appItems.map(item => {
-                const iconSrc = item.icon_data || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="%236366f1"><rect width="20" height="20" x="2" y="2" rx="5"/></svg>';
+                const iconSrc = item.icon_data || toAssetUrl(item.icon_path) || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="%236366f1"><rect width="20" height="20" x="2" y="2" rx="5"/></svg>';
                 return `
                     <div class="app-item" data-id="${item.id}" data-path="${encodeURIComponent(item.path)}"
                         onclick="onAppItemClick('${encodeURIComponent(item.path)}')"
@@ -1237,6 +1237,14 @@
                     </div>
                 `;
             }).join('');
+        }
+
+        function toAssetUrl(path) {
+            if (!path) return '';
+            const encoded = encodeURIComponent(path);
+            return navigator.userAgent.includes('Windows')
+                ? `http://asset.localhost/${encoded}`
+                : `asset://localhost/${encoded}`;
         }
 
         function escapeHtml(text) {

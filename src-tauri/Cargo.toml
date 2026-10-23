@@ -21,7 +21,7 @@ cc = "1.10"
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-tauri = { version = "2.12", features = ["tray-icon"] }
+tauri = { version = "2.12", features = ["protocol-asset", "tray-icon"] }
 tauri-plugin-notification = "2.7"
 tauri-plugin-shell = "2.5"
 tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "time", "net", "sync", "io-util"] }

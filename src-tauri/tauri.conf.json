@@ -29,7 +29,15 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "$HOME/.gotify_icons/**",
+          "$APPDATA/.gotify_icons/**",
+          "$APPCONFIG/.gotify_icons/**"
+        ]
+      }
     }
   },
   "bundle": {
