@@ -1,6 +1,6 @@
 [package]
 name = "gotify-notifier"
-version = "0.5.1"
+version = "0.5.0"
 description = "A Gotify notification client with liquid glass desktop widget"
 authors = ["you"]
 license = ""

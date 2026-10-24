@@ -315,7 +315,7 @@ dependencies = [
 
 [[package]]
 name = "bs58"
-version = "0.5.1"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf88ba1141d185c399bee5288d850d63b8369520c1eafc32a0430b5b6c287bf4"
 dependencies = [
@@ -1383,7 +1383,7 @@ dependencies = [
 
 [[package]]
 name = "gotify-notifier"
-version = "0.5.1"
+version = "0.5.0"
 dependencies = [
  "base64 0.22.1",
  "cc",
@@ -3896,7 +3896,7 @@ dependencies = [
 
 [[package]]
 name = "tendril"
-version = "0.5.1"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5fed54709c5b3a53d09bb1c113ea4f5ceafd1e772ddcb0030a82e1d56c087b08"
 dependencies = [
@@ -4748,7 +4748,7 @@ dependencies = [
 
 [[package]]
 name = "windows-strings"
-version = "0.5.1"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7837d08f69c77cf6b07689544538e017c1bfcf57e34b4c0ff58e6c2cd3b37091"
 dependencies = [
