@@ -45,6 +45,11 @@
   - **常驻桌面 (底层)**：自动切换至 **`0.45` (45%)** 高通透度环境玻璃，自然融入桌面壁纸。
   - **丝滑呼吸过渡**：切换形态时背景透明度平滑过渡，并在调节透明度时独立持久化保存两套参数。
 
+- 🗂️ **桌面应用盒 (App Shelf)**
+  - 把常用 App / 文件夹拖进应用盒即可固定，单击启动、右键在访达中显示；
+  - 图标首次读取后落盘为 PNG，配置文件不再塞入 base64；
+  - 关闭应用盒即销毁其 WebView 进程，下次打开按需重建，闲置时不占内存。
+
 - 🍎 **纯后台常驻守护 · 默认不占 Dock 栏与任务栏**
   - **原生后台体验**：默认作为后台辅助服务（`Accessory` 模式）运行，仅在 macOS 顶部菜单栏与 Windows 系统托盘常驻，还你清爽干净的 Dock 栏。
   - **托盘快捷开关**：托盘右键菜单提供 `🍎 显示/隐藏 Dock 图标` 与 `🪟 显示/隐藏任务栏图标` 快捷开关，并与设置窗口实时双向毫秒级同步。
@@ -76,7 +81,7 @@
 ## 🚀 下载与安装 (Installation)
 
 ### 系统要求
-- **macOS 26+（Apple Silicon）**：原生液态玻璃依赖 `NSGlassEffectView`，推荐 macOS 26 / 27。
+- **macOS 11+（Apple Silicon / Intel）**：macOS 26 / 27 会自动启用原生液态玻璃 `NSGlassEffectView`，旧系统回退到 CSS 玻璃；当前发布包为 Apple Silicon 版本。
 - **Windows 10/11 (x64)**：使用下方预编译安装包。
 - 源码构建需要 Rust >= 1.77.2 与 Node.js 18+。
 
@@ -84,6 +89,8 @@
 前往 [Releases 页面](https://github.com/antboot/gotify-desktop/releases/latest) 下载适用于你系统的预编译安装包：
 - **macOS (Apple Silicon)**：下载 `.dmg` 文件，拖入 `Applications` 即可使用（已使用开发者证书签名，可正常通过本地网络权限）。
 - **Windows**：下载 `Gotify_Notifier_*_x64-setup.exe`（安装引导版）、`.msi`（企业安装版）或 `.zip`（便携免安装绿色版）。
+
+> 📌 **版本策略**：全平台共用一个版本号（当前 `0.5.0`）。如果只有 macOS 端需要更新，只替换现有 Release 中的 macOS 产物，不提升版本号，避免与 Windows 端版本错位。具体命令见 [发布指南](GITHUB_ACTIONS_GUIDE.md)。
 
 ### 方式二：源码构建
 

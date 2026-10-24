@@ -7,6 +7,8 @@
 - **macOS**: DMG 和 APP 包（支持 Intel 和 Apple Silicon）
 - **Linux**: DEB 和 AppImage 包
 
+> ⚠️ **当前状态（2026-10-24）**：该工作流在 GitHub 上被手动禁用（`disabled_manually`），推送 tag **不会**触发构建。需要先在仓库 **Actions → Build and Release → Enable workflow** 中启用。当前 macOS 正式包由本地 `./build.sh` 签名构建后上传到已有 Release。
+
 ## 🚀 使用方法
 
 ### 方法 1: 手动触发构建（推荐用于测试）
@@ -25,11 +27,11 @@
 
 1. **在本地创建并推送 tag**:
    ```bash
-   # 创建 tag（版本号根据实际情况修改）
-   git tag v0.1.0
+   # 创建 tag（版本号根据实际情况修改；全平台共用一个版本号）
+   git tag v0.5.0
    
    # 推送 tag 到 GitHub
-   git push origin v0.1.0
+   git push origin v0.5.0
    ```
 
 2. **自动构建和发布**:
@@ -37,6 +39,38 @@
    - 开始构建所有平台的安装包
    - 构建完成后自动创建 GitHub Release（草稿状态）
    - 你可以在 Releases 页面编辑并发布
+
+## 🍎 macOS 单平台发布（当前实际流程）
+
+当只有 macOS 端需要更新、而 Windows / Linux 仍停留在旧版本时，**不要升版本号**。全平台保持同一个版本（当前为 `0.5.0`），只替换该 Release 下的 macOS 产物：
+
+```bash
+VERSION=0.5.0
+ARCH=$(uname -m)   # Apple Silicon 为 arm64
+
+# 1. 构建：编译 + 签名 + 打包 DMG + 安装到 /Applications + 启动
+./build.sh --run
+
+# 2. 按 Release 约定重命名产物（避免 --clobber 覆盖不到旧文件）
+cp "src-tauri/target/release/bundle/dmg/Gotify Notifier_${VERSION}_${ARCH}.dmg" \
+   "/tmp/Gotify_Notifier_${VERSION}_aarch64.dmg"
+ditto -c -k --sequesterRsrc --keepParent \
+  "src-tauri/target/release/bundle/macos/Gotify Notifier.app" \
+  "/tmp/Gotify_Notifier_${VERSION}_aarch64.zip"
+
+# 3. 覆盖已有 Release 的 macOS 资源（Windows 资源保持不动）
+gh release upload "v${VERSION}" \
+  "/tmp/Gotify_Notifier_${VERSION}_aarch64.dmg" \
+  "/tmp/Gotify_Notifier_${VERSION}_aarch64.zip" --clobber
+
+# 4. 在发布说明里追加本次刷新记录
+gh release edit "v${VERSION}" --notes-file release-notes.md
+```
+
+注意事项：
+- CI 构建的 macOS 包没有开发者证书与 Entitlements，无法通过本地网络权限（`os error 65`）。macOS 包应使用本地 `./build.sh` 构建。
+- 只覆盖对应架构的资源文件名；不要删除 Windows / Linux 产物。
+- 版本号同步写在 `package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`，改版本时必须三处一致。
 
 ## 📦 下载构建产物
 
@@ -106,14 +140,14 @@
 ```bash
 # 1. 确保所有改动已提交
 git add .
-git commit -m "准备发布 v0.1.0"
+git commit -m "准备发布 v0.5.0"
 
 # 2. 推送到 GitHub
 git push origin main
 
 # 3. 创建并推送 tag
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.5.0
+git push origin v0.5.0
 
 # 4. 等待 GitHub Actions 完成构建（可以在 Actions 页面查看进度）
 
@@ -134,7 +168,7 @@ git push origin v0.1.0
 
 ## 📚 更多资源
 
-- [Tauri 官方文档](https://tauri.app/v1/guides/building/)
+- [Tauri 官方文档](https://tauri.app/v2/guides/building/)
 - [GitHub Actions 文档](https://docs.github.com/en/actions)
 - [Tauri Action](https://github.com/tauri-apps/tauri-action)
 

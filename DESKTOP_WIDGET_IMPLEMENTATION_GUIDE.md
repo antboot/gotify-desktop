@@ -18,7 +18,8 @@
 10. [macOS 本地网络权限与签名避坑 (os error 65)](#10-macos-本地网络权限与签名避坑-os-error-65)
 11. [原生液态玻璃 NSGlassEffectView（macOS 26+）](#11-原生液态玻璃-nsglasseffectviewmacos-26)
 12. [非激活窗口与焦点态稳定性（反光闪跳根治）](#12-非激活窗口与焦点态稳定性反光闪跳根治)
-13. [可直接发给 AI 的标准 Prompt 提示词模板](#13-可直接发给-ai-的标准-prompt-提示词模板)
+13. [安全与性能加固（CSP、IPC 与资源回收）](#13-安全与性能加固cspipc-与资源回收)
+14. [可直接发给 AI 的标准 Prompt 提示词模板](#14-可直接发给-ai-的标准-prompt-提示词模板)
 
 ---
 
@@ -154,6 +155,9 @@ pub fn set_desktop_pin(hwnd: isize, pin: bool) {
 
 ### 6.2 解决方案
 - 在后端启动轻量无焦光标跟踪任务（或 Cocoa `NSTrackingArea` 带 `NSTrackingActiveAlways`）；
+- 轮询不能固定 50ms 硬跑，否则待机功耗偏高。按状态自适应：光标在组件内 **40ms**、组件可见但光标在外 **100ms**、所有组件隐藏 **500ms**；
+- 遮挡检测（`CGWindowListCopyWindowInfo` 前到后扫描）结果缓存几百毫秒，跳过 `alpha≈0` 与 `layer>=20` 的 Dock 全屏透明窗口；
+- 仅当取整后的坐标变化时才发送事件，系统休眠或全部隐藏时暂停轮询；
 - 当光标位于小组件矩形内时，向 Webview 发送 `native-mouse-hover` 坐标；
 - 前端通过 `document.elementFromPoint(x, y)` 命中卡片，触发已阅流光动效并在移出时平滑标记已阅，**用户无需点击激活窗口即可划过即读**！
 
@@ -167,11 +171,13 @@ pub fn set_desktop_pin(hwnd: isize, pin: bool) {
 - **恒定半透底色**：通过 `--widget-opacity` 变量统一驱动。
 
 ### 7.2 纯内发光打造晶莹浮雕（杜绝外投影黑边）
+> ⚠️ 不要在带 `backdrop-filter` 的元素上使用 `clip-path`：WebKit 会破坏 `CABackdropLayer` 的 GPU 合成，回退到不稳定的遮罩 FBO，重绘时出现 1 帧黑块/暗块闪烁。用 `border-radius` + `overflow: hidden` 裁剪即可。
+
 ```css
 .desktop-widget-card {
     border-radius: 16px !important;
-    clip-path: inset(0 round 16px) !important;
-    -webkit-clip-path: inset(0 round 16px) !important;
+    overflow: hidden !important;
+    transform: translateZ(0);
     background: rgba(22, 28, 40, var(--widget-opacity, 0.45)) !important;
     backdrop-filter: blur(32px) !important;
     -webkit-backdrop-filter: blur(32px) !important;
@@ -310,7 +316,40 @@ msg_usize(win, prev, 1);
 
 ---
 
-## 13. 可直接发给 AI 的标准 Prompt 提示词模板
+## 13. 安全与性能加固（CSP、IPC 与资源回收）
+
+### 13.1 CSP 与内联事件的“假死”陷阱
+**症状**：加上 CSP 后，悬停、滚动、拖拽都正常，但所有按钮、菜单项和 `onclick="..."` 全部无响应，像主线程卡死；而 `addEventListener` 注册的事件仍然能触发。
+
+**根因**：`script-src` 一旦包含 nonce 或 hash，浏览器（WKWebView）会忽略 `'unsafe-inline'`。Tauri 2 会在运行时向 CSP 注入 nonce/hash（`replace_csp_nonce`），于是内联属性处理器被拦截。
+
+**处理原则**：
+1. 优先改写为 `addEventListener` + 事件委托，内联属性与 nonce-based CSP 不兼容。
+2. 存量内联处理器较多时，在 `tauri.conf.json` 设 `"csp": null`，改为每个页面写 `<meta http-equiv="Content-Security-Policy">`，保留 `'unsafe-inline'`，同时继续限制 `object-src 'none'`、`base-uri 'self'`、`connect-src 'self' ipc: http://ipc.localhost`。
+3. 验证必须用真实点击（CGEvent 或自动化脚本），不要只看界面是否渲染。
+4. 不要把 `connect-src` 放开成 `*`。
+
+### 13.2 渲染与 IPC 性能
+- 原生玻璃调参滑杆：CSS 变量逐帧更新，原生 IPC 合并到约 15 次/秒（66ms），参数相同则跳过调用。
+- 通知列表按 id 做 keyed DOM 复用，避免整块 `innerHTML` 重写；Markdown 渲染结果按消息缓存。
+- 轮询等热路径降噪，不在每个 tick 打印日志。
+
+### 13.3 资源回收与生命周期
+- 应用盒（App Shelf）关闭时先持久化位置/尺寸，再 `window.close()` 销毁 WebView，下次打开按需重建；图标以 PNG 文件存放在配置目录（`.gotify_icons`），并一次性迁移历史 base64 数据。
+- 睡眠唤醒、网络恢复、窗口重新聚焦时用 `tokio::sync::Notify` 打断指数退避并立即重连；轮询中用 `SystemTime` 跳变检测唤醒。
+
+### 13.4 输入与访问面收敛
+- `marked` / `DOMPurify` 本地 vendored（附 LICENSE），不依赖 CDN；Markdown 渲染前统一净化。
+- 外链在 Rust 侧二次校验协议（仅 `http` / `https` / `mailto`）并拒绝控制字符。
+- 打开应用 / 在访达中显示只接受应用盒中已收录的路径。
+- 移除不需要的 `tauri-plugin-shell` 与 `shell:allow-open` 能力。
+
+### 13.5 构建参数
+- `bundle.macOS.minimumSystemVersion` 至少设为 `11.0`，否则使用 `@available` 的 Objective-C 代码会因 `___isPlatformVersionAtLeast` 未定义而链接失败。
+
+---
+
+## 14. 可直接发给 AI 的标准 Prompt 提示词模板
 
 ```markdown
 请帮我将当前应用实现为极具苹果质感的“纯桌面小组件”模式，严格遵循以下全套工程规范：
@@ -340,4 +379,13 @@ msg_usize(win, prev, 1);
 - 嵌入系统 NSGlassEffectView，WebView 保持透明，玻璃层置于其下；
 - 暴露折射、模糊、反光亮度、反光厚度等可调参数，并持久化到本地配置；
 - 在窗口焦点/外观变化后用异步重刷恢复用户参数，禁止在 AppKit 回调中同步执行 CATransaction flush（会死锁）。
+
+【5. 安全与性能】
+- 前端依赖（marked / DOMPurify）本地随包内置，Markdown 渲染前必须净化；
+- 外链协议在 Rust 侧白名单校验（仅 http/https/mailto），移除 shell 插件与任意命令打开能力；
+- 每个窗口配置 CSP；若使用内联 onclick，必须避免 nonce-based script-src，或改用 addEventListener；
+- 原生 IPC 合并到约 15 次/秒，列表按 id 复用 DOM，Markdown 结果缓存；
+- 光标轮询自适应（40/100/500ms）并缓存遮挡检测结果；辅助 WebView 关闭即销毁；
+- 睡眠唤醒/网络恢复时立即打断退避并重连；
+- tauri.conf.json 设置 bundle.macOS.minimumSystemVersion = "11.0" 以上。
 ```

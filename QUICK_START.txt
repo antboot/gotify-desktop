@@ -2,6 +2,13 @@
 ║          🚀 GitHub Actions 快速使用指南                        ║
 ╚════════════════════════════════════════════════════════════════╝
 
+⚠️ 当前状态（2026-10-24）
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GitHub Actions 工作流目前被手动禁用，推送 tag 不会触发构建。
+需要先在 Actions 页面启用 "Build and Release"。
+macOS 正式包请使用本地构建：./build.sh --run
+（本地构建会自动签名并安装到 /Applications）
+
 📦 支持的平台和格式
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅ Windows        → MSI + NSIS 安装包
@@ -30,8 +37,8 @@
      ./deploy.sh
    
    方式 B - 手动操作:
-     git tag v0.1.0
-     git push origin v0.1.0
+     git tag v0.5.0
+     git push origin v0.5.0
 
 
 ⚡️ 日常发布流程
@@ -96,7 +103,7 @@ A: 1. 查看 Actions 页面的详细日志
 
 Q: 如何删除已发布的版本？
 A: 1. 删除 Release: Releases → 选择版本 → Delete
-   2. 删除 Tag: git tag -d v0.1.0 && git push --delete origin v0.1.0
+   2. 删除 Tag: git tag -d v0.5.0 && git push --delete origin v0.5.0
 
 Q: 可以只构建特定平台吗？
 A: 可以，编辑 .github/workflows/build.yml 文件，

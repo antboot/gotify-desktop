@@ -1,6 +1,6 @@
 ---
 name: macos-transparent-desktop-widget
-description: Implementation guide and engineering patterns for macOS transparent liquid-glass desktop widgets in Tauri, Electron, and native apps. Solves window levels, Stage Manager layering, Cocoa shadow clipping, and WebKit color stability.
+description: Implementation guide and engineering patterns for macOS transparent liquid-glass desktop widgets in Tauri, Electron, and native apps. Solves window levels, Stage Manager layering, Cocoa shadow clipping, WebKit color stability, and Tauri CSP/inline-handler failures.
 ---
 
 # macOS Transparent Liquid-Glass Desktop Widget Skill
@@ -18,6 +18,8 @@ Use this skill whenever building, refactoring, or optimizing a desktop widget ap
 - Embedding Apple's **native `NSGlassEffectView` liquid glass** (macOS 26+) with custom refraction / blur / specular tuning.
 - Eliminating **focus-state glass flashes** and cross-widget linkage caused by AppKit key-window assignment.
 - Resolving macOS 15+ / 27 Local Network Privacy restrictions (`os error 65: No route to host`).
+- Diagnosing a UI that looks alive but **ignores every click** right after adding a CSP header.
+- Building an auxiliary **App Shelf** webview that must release its process when closed.
 
 ---
 
@@ -165,7 +167,14 @@ fn set_show_in_dock(app: tauri::AppHandle, enabled: bool) -> Result<(), String> 
 When a desktop widget is in Level `-1` or accessory mode, it does **not** have active key window focus. Standard WebKit `:hover` and `onmouseenter` will fail to fire as the user moves their cursor over notifications.
 
 ### 4.2 Occlusion-Aware Cursor Polling ( Recommended )
-Unfocused/Low-level windows frequently lose `mouseenter`/`mouseleave`; poll the cursor every ~50 ms instead.
+Unfocused/Low-level windows frequently lose `mouseenter`/`mouseleave`; poll the cursor instead of relying on DOM hover. Do **not** use a fixed 50 ms timer — that burns CPU for an idle wallpaper widget. Use adaptive intervals:
+
+| Widget state | Interval |
+|---|---|
+| Cursor inside a widget | 40 ms |
+| Visible but cursor outside | 100 ms |
+| All widgets hidden | 500 ms |
+
 Also verify the cursor is not covered by another app, otherwise "hover" fires under overlapping windows:
 ```rust
 // CGWindowListCopyWindowInfo returns windows front-to-back.
@@ -175,6 +184,8 @@ let topmost_is_ours = /* front-to-back scan */;
 ```
 Without the `layer >= 20` / `alpha ~ 0` filters the widget will *never* count as hovered on a normal desktop, because the Dock owns a full-screen transparent window above it.
 
+Cache the occlusion answer for a few hundred milliseconds; a front-to-back window scan on every 40 ms tick is otherwise the dominant idle cost. Emit coordinates only when the rounded position changes, and stop polling entirely while the display is asleep or every widget is hidden.
+
 ### 4.3 The Solution: Hybrid NSTrackingArea & Cursor Polling
 1. Register `NSTrackingArea` with `NSTrackingActiveAlways`:
    ```objc
@@ -182,10 +193,10 @@ Without the `layer >= 20` / `alpha ~ 0` filters the widget will *never* count as
                                   NSTrackingActiveAlways | 
                                   NSTrackingInVisibleRect;
    ```
-2. Or run a lightweight 50ms polling loop on macOS querying cursor position relative to window bounds:
+2. Or run an adaptive polling loop on macOS querying cursor position relative to window bounds:
    ```rust
    // When cursor is within window bounds, emit "native-mouse-hover" { x, y }
-   window.emit("native-mouse-hover", json!({ "x": cx, "y": cy }));
+   window.emit_to(window.label(), "native-mouse-hover", json!({ "x": cx, "y": cy, "inside": true }));
    ```
 3. Frontend uses `document.elementFromPoint(x, y)` to trigger card hover effects and mark unread items as read even without window focus!
 
@@ -409,6 +420,13 @@ Keeping the "glass active" state for ~3 s while sinking the z-order immediately 
 
 ## 12. Build-System Pitfalls
 
+- Tauri CLI defaults the macOS deployment target to **10.13** on Intel builds. Any Objective-C source using `@available(...)` will then fail to link with `Undefined symbols: ___isPlatformVersionAtLeast`. Set a modern target in `tauri.conf.json`:
+  ```json
+  "bundle": {
+    "macOS": { "minimumSystemVersion": "11.0" }
+  }
+  ```
+  and touch the `.m` file afterwards so `cc` actually recompiles it.
 - The `cc` crate does **not** track `.m` sources by default. Without
   ```rust
   println!("cargo:rerun-if-changed=src/macos_app_info.m");
@@ -419,3 +437,36 @@ Keeping the "glass active" state for ~3 s while sinking the z-order immediately 
   nohup "path/App.app/Contents/MacOS/app" > /tmp/app.log 2>&1 &
   ```
 - After changing window/signature metadata, re-run `lsregister` and launch from `/Applications`.
+
+---
+
+## 13. Tauri CSP & the "Dead UI" Trap
+
+### 13.1 Symptom
+After adding a CSP to `tauri.conf.json`, the app looks completely frozen: hover states and scrolling still work, but **every button, menu item and inline `onclick="..."` does nothing**. `addEventListener` handlers keep working, which makes the bug look like a frozen main thread.
+
+### 13.2 Root cause
+When `script-src` contains a **nonce or hash**, browsers ignore `'unsafe-inline'`. Tauri 2 injects a per-run nonce/hash into the policy (`replace_csp_nonce` in `src/manager/mod.rs`), so inline attribute handlers are blocked even though the policy string also contains `'unsafe-inline'`.
+
+### 13.3 Rules
+1. Prefer `addEventListener` plus event delegation on a stable container. Inline attributes (`onclick`, `oninput`, `oncontextmenu`) are incompatible with nonce-based CSP.
+2. If the existing UI is inline-handler-heavy, set `"csp": null` in `tauri.conf.json` and ship a `<meta http-equiv="Content-Security-Policy">` in every HTML page instead. A meta policy with `'unsafe-inline'` still blocks remote scripts and is enough for a local-only app, but it is weaker than a response header.
+3. Verify by dispatching a real click (or CGEvent), not by looking at the window. A CSP violation is visible in the WebView console but produces no visual change.
+4. Do not "fix" this by removing CSP entirely and opening the network: keep `connect-src` limited to `ipc:` / `http://ipc.localhost` and `self`.
+
+### 13.4 Related hardening checklist
+- Vendor `marked` / `DOMPurify` locally (plus license files) instead of loading a CDN; sanitize all Markdown before `innerHTML`.
+- Validate external URLs in Rust: allow only `http`, `https`, `mailto`, and reject control characters; remove `tauri-plugin-shell` and `shell:allow-open` if you only need to open links.
+- Validate filesystem paths for "open app" / "reveal in Finder" against the stored app-shelf list — never pass user JSON straight into `open`.
+- Keep per-window capabilities explicit in `capabilities/default.json`.
+
+---
+
+## 14. Runtime Performance Patterns
+
+1. **Coalesce native IPC.** A glass-tuning slider should update CSS every frame but call the native command at most ~15 times/s (e.g. 66 ms timer) and skip identical payloads. Native glass rebuilds are far more expensive than a CSS variable write.
+2. **Reconcile lists by key.** Rebuilding `innerHTML` for a notification list causes WebKit backdrop/compositor churn. Reuse cards keyed by notification id and patch only changed fields; cache rendered Markdown by message id/content.
+3. **Adaptive polling + occlusion cache** (see §4.2). Pause when hidden/asleep, and drop the log line on every tick.
+4. **Release auxiliary webviews.** An App Shelf window can destroy its webview on close to return the whole WebKit process to the OS: persist position/size first, set `is_open = false`, then `window.close()` and rebuild on demand. Store shelf icons as PNG files under the config directory and migrate any legacy base64 icons once.
+5. **Interrupt backoff on wake.** Wrap the reconnect sleep in `tokio::select!` against a `tokio::sync::Notify`; fire it on sleep/wake, network change and window focus. Also detect a `SystemTime` jump larger than the poll interval to treat it as a wake event.
+6. **Emit per window.** Use `window.emit_to(label, ...)`; a default `{ kind: 'Any' }` listener receives events from every window and makes two widgets trigger each other.
