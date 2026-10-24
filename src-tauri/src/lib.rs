@@ -8,6 +8,13 @@ use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use image::GenericImageView;
 use std::collections::HashMap;
 
+macro_rules! debug_log {
+    ($($arg:tt)*) => {{
+        #[cfg(debug_assertions)]
+        println!($($arg)*);
+    }};
+}
+
 // ── macOS: Override constrainFrameRect safely on tao's existing per-window class ──
 // tao creates a unique NSWindow subclass per window. We add constrainFrameRect to THAT
 // existing class via class_addMethod — NO object_setClass, NO isa change.
@@ -60,6 +67,7 @@ mod macos_window {
         fn CGWindowListCopyWindowInfo(option: u32, relative_to_window: u32) -> *mut c_void;
         fn CGMainDisplayID() -> u32;
         fn CGDisplayBounds(display: u32) -> CGRect;
+        fn CGDisplayIsAsleep(display: u32) -> u32;
         fn CGRectMakeWithDictionaryRepresentation(dict: *mut c_void, rect: *mut CGRect) -> u8;
         static kCGWindowNumber: *const c_void;
         static kCGWindowBounds: *const c_void;
@@ -624,6 +632,17 @@ mod macos_window {
         pub y: f64,
     }
 
+    fn occlusion_cache() -> &'static std::sync::Mutex<std::collections::HashMap<usize, (std::time::Instant, bool)>> {
+        static CACHE: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<usize, (std::time::Instant, bool)>>> =
+            std::sync::OnceLock::new();
+        CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+    }
+
+    /// 显示屏是否处于睡眠状态（锁屏/休眠时暂停轮询，避免无意义唤醒）
+    pub fn display_is_asleep() -> bool {
+        unsafe { CGDisplayIsAsleep(CGMainDisplayID()) != 0 }
+    }
+
     /// 获取鼠标相对于该 NSWindow 的客户区坐标（左上角为 0,0）。
     /// 无论窗口是否为 Key/Active Window，该方法都能瞬时返回鼠标相对坐标。
     pub fn get_window_client_mouse_location(ns_window: *mut c_void) -> Option<(f64, f64)> {
@@ -653,7 +672,23 @@ mod macos_window {
                 // NSScreen 坐标（左下原点、y 向上）→ CoreGraphics 坐标（主屏左上原点、y 向下）
                 let main_height = CGDisplayBounds(CGMainDisplayID()).size.height;
                 let cg_point = CGPoint { x: cocoa_x, y: main_height - cocoa_y };
-                if !is_window_topmost_at_point(ns_window, cg_point) {
+                let key = ns_window as usize;
+                let now = std::time::Instant::now();
+                let cached = occlusion_cache()
+                    .lock()
+                    .ok()
+                    .and_then(|m| m.get(&key).copied());
+                let topmost = match cached {
+                    Some((t, v)) if now.duration_since(t) < std::time::Duration::from_millis(200) => v,
+                    _ => {
+                        let v = is_window_topmost_at_point(ns_window, cg_point);
+                        if let Ok(mut m) = occlusion_cache().lock() {
+                            m.insert(key, (now, v));
+                        }
+                        v
+                    }
+                };
+                if !topmost {
                     return None;
                 }
                 Some((client_x, client_y))
@@ -1007,7 +1042,7 @@ fn save_unread_bounce(app: tauri::AppHandle, enabled: bool, amplitude: u32) -> R
     let config_path = format!("{}/.gotify_unread_bounce.json", config_dir);
     let _ = std::fs::write(&config_path, serde_json::to_string_pretty(&cfg).unwrap());
     let _ = app.emit("tauri://unread-bounce-changed", serde_json::json!(cfg));
-    println!("🦘 已保存未读弹跳设置: enabled={}, amp={}px", enabled, clamped_amp);
+    debug_log!("🦘 已保存未读弹跳设置: enabled={}, amp={}px", enabled, clamped_amp);
     Ok(cfg)
 }
 
@@ -1101,6 +1136,17 @@ struct AppState {
     is_suppressing_save: Arc<AtomicBool>,
     /// 小组件移动防抖持久化令牌
     widget_move_debounce_token: Arc<AtomicU64>,
+    /// 唤醒/网络恢复时打断 WebSocket 退避等待
+    ws_retry_notify: Arc<tokio::sync::Notify>,
+}
+
+fn request_ws_retry_if_needed(app: &tauri::AppHandle) {
+    let state: tauri::State<AppState> = app.state();
+    let running = *state.ws_running.lock().unwrap();
+    let connected = state.ws_status.lock().map(|s| s.as_str() == "connected").unwrap_or(false);
+    if running && !connected {
+        state.ws_retry_notify.notify_one();
+    }
 }
 
 fn emit_status(app: &tauri::AppHandle, ws_status: &Arc<Mutex<String>>, status: &str) {
@@ -1359,10 +1405,9 @@ async fn test_connection(
         let host = server_url
             .trim_start_matches("https://")
             .trim_start_matches("http://");
+        debug_log!("🧪 测试连接到: {}{}/stream", protocol, host);
         format!("{}{}/stream?token={}", protocol, host, client_token)
     };
-
-    println!("🧪 测试连接到: {}", ws_url);
 
     // 尝试解析 URL
     let url = url::Url::parse(&ws_url)
@@ -1427,9 +1472,10 @@ async fn start_websocket(
 
     let ws_running_clone = state.ws_running.clone();
     let ws_status_clone = state.ws_status.clone();
-    
+    let ws_retry_clone = state.ws_retry_notify.clone();
+
     tokio::spawn(async move {
-        if let Err(e) = run_websocket(app, config, ws_running_clone, ws_status_clone).await {
+        if let Err(e) = run_websocket(app, config, ws_running_clone, ws_status_clone, ws_retry_clone).await {
             eprintln!("WebSocket error: {}", e);
         }
     });
@@ -1455,6 +1501,16 @@ async fn is_websocket_running(state: State<'_, AppState>) -> Result<bool, String
 async fn get_connection_status(state: State<'_, AppState>) -> Result<String, String> {
     let status = state.ws_status.lock().unwrap();
     Ok(status.clone())
+}
+
+#[tauri::command]
+async fn request_reconnect(state: State<'_, AppState>) -> Result<(), String> {
+    let running = *state.ws_running.lock().unwrap();
+    let connected = state.ws_status.lock().map(|s| s.as_str() == "connected").unwrap_or(false);
+    if running && !connected {
+        state.ws_retry_notify.notify_one();
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -1501,6 +1557,7 @@ async fn run_websocket(
     config: ConnectionConfig,
     ws_running: Arc<Mutex<bool>>,
     ws_status: Arc<Mutex<String>>,
+    ws_retry_notify: Arc<tokio::sync::Notify>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // 构建 WebSocket URL
     let ws_url = {
@@ -1513,10 +1570,10 @@ async fn run_websocket(
         let host = server_url
             .trim_start_matches("https://")
             .trim_start_matches("http://");
+        debug_log!("Connecting to WebSocket: {}{}/stream", protocol, host);
         format!("{}{}/stream?token={}", protocol, host, config.client_token)
     };
 
-    println!("Connecting to WebSocket: {}", ws_url);
     let url = url::Url::parse(&ws_url)?;
 
     let mut reconnect_attempt = 0u32;
@@ -1556,11 +1613,10 @@ async fn run_websocket(
                         msg = tokio::time::timeout(std::time::Duration::from_secs(45), read.next()) => {
                             match msg {
                                 Ok(Some(Ok(Message::Text(text)))) => {
-                                    println!("Received message: {}", text);
 
                                     // 解析 Gotify 消息
                                     if let Ok(gotify_msg) = serde_json::from_str::<GotifyMessage>(&text) {
-                                        println!("📨 收到 Gotify 消息: {} (priority={})", gotify_msg.title, gotify_msg.priority);
+                                        debug_log!("📨 收到 Gotify 消息: {} (priority={})", gotify_msg.title, gotify_msg.priority);
 
                                         let sound_cfg = load_sound_config_from_file();
                                         let should_sound = sound_cfg.sound_enabled && gotify_msg.priority >= sound_cfg.min_priority;
@@ -1574,12 +1630,12 @@ async fn run_websocket(
                                             .body(&gotify_msg.message);
 
                                         if should_sound {
-                                            println!("🔔 为通知添加默认系统声音");
+                                            debug_log!("🔔 为通知添加默认系统声音");
                                             notification = notification.sound("default");
                                         }
 
                                         match notification.show() {
-                                            Ok(_) => println!("✅ 系统通知已生成"),
+                                            Ok(_) => debug_log!("✅ 系统通知已生成"),
                                             Err(e) => eprintln!("❌ 发送通知失败: {:?}", e),
                                         }
 
@@ -1590,7 +1646,7 @@ async fn run_websocket(
                                                 obj.insert("should_play_sound".to_string(), serde_json::Value::Bool(should_sound));
                                             }
                                             match window.emit("gotify-message", &payload) {
-                                                Ok(_) => println!("✅ 消息已推送到前端"),
+                                                Ok(_) => debug_log!("✅ 消息已推送到前端"),
                                                 Err(e) => eprintln!("❌ 推送失败: {}", e),
                                             }
                                         } else {
@@ -1650,11 +1706,17 @@ async fn run_websocket(
         }
 
         reconnect_attempt += 1;
-        // 指数退避重连等待时间：2s, 4s, 8s, 16s, 最大 30s
+        // 指数退避重连等待时间：2s, 4s, 8s, 16s, 最大 30s；唤醒/网络恢复可立即打断
         let delay_secs = std::cmp::min(1u64 << reconnect_attempt.min(5), 30);
         emit_status(&app, &ws_status, "reconnecting");
         println!("⏳ {} 秒后尝试重新连接...", delay_secs);
-        tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
+        tokio::select! {
+            _ = tokio::time::sleep(std::time::Duration::from_secs(delay_secs)) => {}
+            _ = ws_retry_notify.notified() => {
+                println!("⚡ 唤醒/网络恢复，立即重连");
+                reconnect_attempt = 0;
+            }
+        }
     }
 
     emit_status(&app, &ws_status, "disconnected");
@@ -1669,7 +1731,6 @@ async fn run_websocket(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_shell::init())
         .manage(AppState {
             config: Arc::new(Mutex::new(load_config_from_file())),
             ws_running: Arc::new(Mutex::new(false)),
@@ -1680,6 +1741,7 @@ pub fn run() {
             dock_menu_item: Arc::new(Mutex::new(None)),
             is_suppressing_save: Arc::new(AtomicBool::new(true)),
             widget_move_debounce_token: Arc::new(AtomicU64::new(0)),
+            ws_retry_notify: Arc::new(tokio::sync::Notify::new()),
         })
         .setup(|app| {
             // macOS: 根据用户设置决定是否显示 Dock 图标
@@ -1719,13 +1781,28 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 let mut last_client_pos: [Option<(i32, i32)>; 2] = [None, None];
                 loop {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                    // 显示屏睡眠时暂停轮询，避免无意义的定时唤醒
+                    #[cfg(target_os = "macos")]
+                    if macos_window::display_is_asleep() {
+                        last_client_pos = [None, None];
+                        let sleep_started = std::time::SystemTime::now();
+                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                        if sleep_started.elapsed().map(|d| d.as_secs() > 4).unwrap_or(false) {
+                            request_ws_retry_if_needed(&hover_app);
+                        }
+                        continue;
+                    }
+
+                    let mut any_visible = false;
+                    let mut any_inside = false;
+
                     for (i, label) in ["main", "app_shelf"].iter().enumerate() {
                         let Some(win) = hover_app.get_webview_window(label) else { continue };
                         if !win.is_visible().unwrap_or(false) {
                             last_client_pos[i] = None;
                             continue;
                         }
+                        any_visible = true;
 
                         #[cfg(target_os = "macos")]
                         let loc: Option<(f64, f64)> = win
@@ -1744,6 +1821,7 @@ pub fn run() {
 
                         match loc {
                             Some((cx, cy)) => {
+                                any_inside = true;
                                 let rounded = (cx.round() as i32, cy.round() as i32);
                                 if last_client_pos[i] != Some(rounded) {
                                     last_client_pos[i] = Some(rounded);
@@ -1758,6 +1836,24 @@ pub fn run() {
                                 }
                             }
                         }
+                    }
+
+                    // 自适应轮询：光标在组件内 40ms；组件可见但未悬停 100ms；全部隐藏 500ms
+                    let delay_ms = if !any_visible {
+                        500
+                    } else if any_inside {
+                        40
+                    } else {
+                        100
+                    };
+                    let sleep_started = std::time::SystemTime::now();
+                    tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
+                    // 系统睡眠会让定时器显著超时；检测到时间跳变即视为唤醒并立即重连
+                    let jumped = sleep_started.elapsed()
+                        .map(|d| d.as_millis() > u128::from(delay_ms) + 3000)
+                        .unwrap_or(false);
+                    if jumped {
+                        request_ws_retry_if_needed(&hover_app);
                     }
                 }
             });
@@ -1876,8 +1972,9 @@ pub fn run() {
 
                         let ws_running_clone = state.ws_running.clone();
                         let ws_status_clone = state.ws_status.clone();
+                        let ws_retry_clone = state.ws_retry_notify.clone();
                         tokio::spawn(async move {
-                            if let Err(e) = run_websocket(app_handle, config, ws_running_clone, ws_status_clone).await {
+                            if let Err(e) = run_websocket(app_handle, config, ws_running_clone, ws_status_clone, ws_retry_clone).await {
                                 eprintln!("WebSocket error: {}", e);
                             }
                         });
@@ -2038,11 +2135,10 @@ pub fn run() {
                     let _ = window.hide();
                     api.prevent_close();
                 } else if window.label() == "app_shelf" {
-                    let _ = window.hide();
+                    // 允许销毁应用盒窗口，释放其 WebView 进程；设置项记录为关闭
                     let mut cfg = load_app_shelf_config_from_file();
                     cfg.is_open = false;
                     let _ = save_app_shelf_config_to_file(&cfg);
-                    api.prevent_close();
                 }
             }
             tauri::WindowEvent::Focused(focused) => {
@@ -2051,6 +2147,8 @@ pub fn run() {
                 // 造成两个小组件互相联动变磨砂；这里用原生逐窗口焦点事件替代。
                 let _ = window.emit_to(window.label(), "widget-focus", serde_json::json!({ "focused": focused }));
                 if *focused {
+                    // 睡眠唤醒或网络切换后用户一回到小组件，立即打断退避等待重连
+                    request_ws_retry_if_needed(window.app_handle());
                     // 当桌面小组件被点击获得焦点时，临时提升层级到前台 (Level 3)，让用户能够看清并无阻碍操作
                     #[cfg(target_os = "macos")]
                     {
@@ -2111,10 +2209,20 @@ pub fn run() {
                         });
                     }
                 } else if window.label() == "app_shelf" {
-                    let mut cfg = load_app_shelf_config_from_file();
-                    cfg.window_x = Some(pos.x);
-                    cfg.window_y = Some(pos.y);
-                    let _ = save_app_shelf_config_to_file(&cfg);
+                    let state: tauri::State<AppState> = window.state();
+                    let token_arc = state.widget_move_debounce_token.clone();
+                    let current_token = token_arc.fetch_add(1, Ordering::SeqCst) + 1;
+                    let target_x = pos.x;
+                    let target_y = pos.y;
+                    tauri::async_runtime::spawn(async move {
+                        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                        if token_arc.load(Ordering::SeqCst) == current_token {
+                            let mut cfg = load_app_shelf_config_from_file();
+                            cfg.window_x = Some(target_x);
+                            cfg.window_y = Some(target_y);
+                            let _ = save_app_shelf_config_to_file(&cfg);
+                        }
+                    });
                 }
             }
             tauri::WindowEvent::Resized(size) => {
@@ -2185,10 +2293,13 @@ pub fn run() {
             stop_websocket,
             is_websocket_running,
             get_connection_status,
+            request_reconnect,
+            open_external_url,
             show_settings_window,
             test_settings_window,
             get_system_theme,
             get_auto_launch,
+            report_js_error,
             set_auto_launch,
             get_show_in_dock,
             set_show_in_dock,
@@ -2252,6 +2363,25 @@ fn get_auto_launch() -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(target_os = "macos")]
+fn escape_applescript_string(input: &str) -> String {
+    input.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+#[cfg(target_os = "macos")]
+fn escape_xml_text(input: &str) -> String {
+    input
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
+#[tauri::command]
+fn report_js_error(message: String) {
+    eprintln!("🪲 [JS] {}", message);
+}
+
 #[tauri::command]
 fn set_auto_launch(enabled: bool) -> Result<(), String> {
     let config_dir = get_config_dir();
@@ -2273,7 +2403,7 @@ fn set_auto_launch(enabled: bool) -> Result<(), String> {
             // 通过 AppleScript 添加到登录项（显示在系统设置的登录项中）
             let script = format!(
                 "tell application \"System Events\" to make login item at end with properties {{path:\"{}\", hidden:false}}",
-                bundle_path
+                escape_applescript_string(&bundle_path)
             );
             let result = std::process::Command::new("osascript")
                 .args(&["-e", &script])
@@ -2309,7 +2439,7 @@ fn set_auto_launch(enabled: bool) -> Result<(), String> {
 </dict>
 </plist>"#,
                 label,
-                bundle_path
+                escape_xml_text(&bundle_path)
             );
             let _ = std::fs::write(&plist_path, &plist);
         } else {
@@ -2322,7 +2452,7 @@ fn set_auto_launch(enabled: bool) -> Result<(), String> {
             let result = std::process::Command::new("osascript")
                 .args(&["-e", &format!(
                     "tell application \"System Events\" to delete login item \"{}\"",
-                    name
+                    escape_applescript_string(&name)
                 )])
                 .output()
                 .map_err(|e| format!("移除开机启动失败: {}", e))?;
@@ -2683,7 +2813,7 @@ async fn set_widget_mode_opacity(mode: String, opacity: f64) -> Result<f64, Stri
     }
     config.opacity = clamped;
     save_widget_config_to_file(&config)?;
-    println!("💾 已保存 {} 模式透明度: {:.2}", mode, clamped);
+    debug_log!("💾 已保存 {} 模式透明度: {:.2}", mode, clamped);
     Ok(clamped)
 }
 
@@ -2729,6 +2859,9 @@ pub struct AppShelfItem {
     pub id: String,
     pub name: String,
     pub path: String,
+    #[serde(default)]
+    pub icon_path: Option<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub icon_data: String,
     pub added_at: u64,
 }
@@ -2765,11 +2898,41 @@ impl Default for AppShelfConfig {
     }
 }
 
+fn shelf_icon_dir() -> std::path::PathBuf {
+    std::path::PathBuf::from(get_config_dir()).join(".gotify_icons")
+}
+
+fn write_shelf_icon(id: &str, data_url: &str) -> Option<String> {
+    use base64::Engine;
+    let raw = data_url.split_once(',').map(|(_, b)| b).unwrap_or(data_url);
+    let bytes = base64::prelude::BASE64_STANDARD.decode(raw).ok()?;
+    if bytes.is_empty() { return None; }
+    let dir = shelf_icon_dir();
+    std::fs::create_dir_all(&dir).ok()?;
+    let file = dir.join(format!("{}.png", id));
+    std::fs::write(&file, bytes).ok()?;
+    Some(file.to_string_lossy().to_string())
+}
+
 fn load_app_shelf_items_from_file() -> Vec<AppShelfItem> {
     let config_dir = get_config_dir();
     let path = format!("{}/.gotify_app_shelf.json", config_dir);
     if let Ok(content) = std::fs::read_to_string(&path) {
-        if let Ok(items) = serde_json::from_str::<Vec<AppShelfItem>>(&content) {
+        if let Ok(mut items) = serde_json::from_str::<Vec<AppShelfItem>>(&content) {
+            // 一次性迁移：把历史 base64 图标落盘，后续只保存文件路径
+            let mut migrated = false;
+            for item in items.iter_mut() {
+                if item.icon_path.is_none() && !item.icon_data.is_empty() {
+                    if let Some(p) = write_shelf_icon(&item.id, &item.icon_data) {
+                        item.icon_path = Some(p);
+                        item.icon_data.clear();
+                        migrated = true;
+                    }
+                }
+            }
+            if migrated {
+                let _ = save_app_shelf_items_to_file(&items);
+            }
             return items;
         }
     }
@@ -2779,7 +2942,7 @@ fn load_app_shelf_items_from_file() -> Vec<AppShelfItem> {
 fn save_app_shelf_items_to_file(items: &[AppShelfItem]) -> Result<(), String> {
     let config_dir = get_config_dir();
     let path = format!("{}/.gotify_app_shelf.json", config_dir);
-    let json = serde_json::to_string_pretty(items)
+    let json = serde_json::to_string(items)
         .map_err(|e| format!("序列化应用盒失败: {}", e))?;
     std::fs::write(&path, json).map_err(|e| format!("写入应用盒配置失败: {}", e))
 }
@@ -2939,10 +3102,22 @@ pub fn create_app_shelf_window(app: &tauri::AppHandle) -> Result<tauri::WebviewW
 async fn toggle_app_shelf_window(app: tauri::AppHandle) -> Result<bool, String> {
     if let Some(window) = app.get_webview_window("app_shelf") {
         if window.is_visible().unwrap_or(false) {
-            let _ = window.hide();
+            // 关闭时销毁 WebView 释放内存，同时把位置/尺寸持久化以便下次重建
+            let pos = window.outer_position().ok();
+            let size = window.outer_size().ok();
+            let factor = window.scale_factor().unwrap_or(1.0);
             let mut cfg = load_app_shelf_config_from_file();
+            if let Some(p) = pos {
+                cfg.window_x = Some(p.x);
+                cfg.window_y = Some(p.y);
+            }
+            if let Some(s) = size {
+                cfg.window_width = ((s.width as f64) / factor).round() as u32;
+                cfg.window_height = ((s.height as f64) / factor).round() as u32;
+            }
             cfg.is_open = false;
             let _ = save_app_shelf_config_to_file(&cfg);
+            let _ = window.close();
             return Ok(false);
         } else {
             let _ = window.show();
@@ -2984,11 +3159,15 @@ fn add_apps_to_shelf(paths: Vec<String>) -> Result<Vec<AppShelfItem>, String> {
         let icon_data = get_app_icon_data_url(&path);
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
         let id = format!("{}_{}", now.as_millis(), items.len());
+        let icon_path = write_shelf_icon(&id, &icon_data);
+        // 已落盘则不再把 base64 写进配置，避免配置膨胀
+        let icon_data = if icon_path.is_some() { String::new() } else { icon_data };
 
         items.push(AppShelfItem {
             id,
             name,
             path,
+            icon_path,
             icon_data,
             added_at: now.as_secs(),
         });
@@ -3001,13 +3180,58 @@ fn add_apps_to_shelf(paths: Vec<String>) -> Result<Vec<AppShelfItem>, String> {
 #[tauri::command]
 fn remove_app_from_shelf(id: String) -> Result<Vec<AppShelfItem>, String> {
     let mut items = load_app_shelf_items_from_file();
+    if let Some(item) = items.iter().find(|it| it.id == id) {
+        if let Some(icon) = item.icon_path.as_ref() {
+            let _ = std::fs::remove_file(icon);
+        }
+    }
     items.retain(|it| it.id != id);
     save_app_shelf_items_to_file(&items)?;
     Ok(items)
 }
 
 #[tauri::command]
+fn open_external_url(url: String) -> Result<(), String> {
+    let parsed = url::Url::parse(url.trim()).map_err(|_| "链接格式无效".to_string())?;
+    if !matches!(parsed.scheme(), "http" | "https" | "mailto") {
+        return Err(format!("不支持的链接协议: {}", parsed.scheme()));
+    }
+    let target = parsed.as_str();
+    if target.chars().any(|c| c.is_control()) {
+        return Err("链接包含非法字符".to_string());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(target)
+            .spawn()
+            .map_err(|e| format!("打开链接失败: {}", e))?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("rundll32")
+            .args(["url.dll,FileProtocolHandler", target])
+            .spawn()
+            .map_err(|e| format!("打开链接失败: {}", e))?;
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(target)
+            .spawn()
+            .map_err(|e| format!("打开链接失败: {}", e))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn open_app_item(path: String) -> Result<(), String> {
+    let items = load_app_shelf_items_from_file();
+    if !items.iter().any(|item| item.path == path) {
+        return Err("该应用不在应用盒中".to_string());
+    }
+
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
@@ -3034,6 +3258,11 @@ fn open_app_item(path: String) -> Result<(), String> {
 
 #[tauri::command]
 fn show_in_finder(path: String) -> Result<(), String> {
+    let items = load_app_shelf_items_from_file();
+    if !items.iter().any(|item| item.path == path) {
+        return Err("该应用不在应用盒中".to_string());
+    }
+
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")

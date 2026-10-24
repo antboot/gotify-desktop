@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 
 <head>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; font-src 'self' data:; media-src 'self' data: http: https:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'self'; form-action 'none'; frame-src 'none'">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gotify 设置</title>
@@ -560,8 +561,8 @@
 
 <body>
     <!-- Tauri API 初始化脚本 -->
+    <script src="js-errors.js"></script>
     <script src="lang.js"></script>
-    <script src="tauri-api.js"></script>
 
     <div class="container">
         <div id="status" class="status"></div>

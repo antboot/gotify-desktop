@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 
 <head>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: asset: http: https:; font-src 'self' data:; media-src 'self' data: http: https:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'self'; form-action 'none'; frame-src 'none'">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>桌面应用盒</title>
@@ -798,7 +799,7 @@
 
     <!-- Tauri v2 事件 API -->
     <script type="module">
-        import { listen } from 'https://cdn.jsdelivr.net/npm/@tauri-apps/api@2/event.js';
+        import { listen } from './tauri-events.js';
         window.__TAURI_LISTEN__ = listen;
     </script>
 
@@ -944,7 +945,7 @@
         function onRefractSliderChange(e) {
             currentRefract = parseFloat(e.target.value);
             localStorage.setItem('liquid_glass_refract', String(currentRefract));
-            syncGlassTuning();
+            syncGlassTuning(true);
         }
 
         function onBlurSliderInput(e) {
@@ -958,7 +959,7 @@
         function onBlurSliderChange(e) {
             currentBlur = parseFloat(e.target.value);
             localStorage.setItem('liquid_glass_blur', String(currentBlur));
-            syncGlassTuning();
+            syncGlassTuning(true);
         }
 
         function onHighlightSliderInput(e) {
@@ -973,7 +974,7 @@
         function onHighlightSliderChange(e) {
             currentHighlight = parseFloat(e.target.value);
             localStorage.setItem('liquid_glass_highlight', String(currentHighlight));
-            syncGlassTuning();
+            syncGlassTuning(true);
         }
 
         function onArcHeightSliderInput(e) {
@@ -988,7 +989,7 @@
         function onArcHeightSliderChange(e) {
             currentArcHeight = parseFloat(e.target.value);
             localStorage.setItem('liquid_glass_arc_height', String(currentArcHeight));
-            syncGlassTuning();
+            syncGlassTuning(true);
         }
 
         function resetGlassToDefaults(e) {
@@ -1006,43 +1007,97 @@
             syncGlassTuning();
         }
 
-        // 同步 macOS 原生液态玻璃调优参数（折射曲率、柔焦高斯模糊、高光棱镜强度、光弧厚度）
-        const syncGlassTuning = () => {
-            const info = getCurrentVariantInfo();
-            const r = currentRefract !== null ? currentRefract : info.defaultRefract;
-            const b = currentBlur !== null ? currentBlur : info.defaultBlur;
-            const h = (currentHighlight !== null ? currentHighlight : info.defaultHighlight) / 100.0;
-            const a = currentArcHeight !== null ? currentArcHeight : (info.defaultArcHeight || 20);
-            document.documentElement.style.setProperty('--glass-highlight-mul', h.toString());
-            document.documentElement.style.setProperty('--glass-arc-height', `${a}px`);
-            try {
-                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
-                    window.__TAURI_INTERNALS__.invoke('tune_widget_glass', {
-                        refraction: r,
-                        blur: b,
-                        highlight: h,
-                        arcHeight: a
-                    }).catch(() => {});
-                }
-            } catch (_) {}
-        };
+        // 滑杆拖动时把原生 IPC 合并到约 15 次/秒，CSS 侧仍然逐帧跟手
+        const NATIVE_GLASS_SYNC_INTERVAL_MS = 66;
+        let nativeGlassSyncTimer = null;
+        let nativeGlassSyncPending = { glass: false, tuning: false };
+        let lastNativeGlassSyncAt = 0;
+        let lastNativeGlassSignature = '';
+        let lastNativeTuningSignature = '';
 
-        // 同步 macOS 原生液态玻璃（NSGlassEffectView + CABackdropLayer 光学折射参数）
-        const syncNativeLiquidGlass = (activeOverride) => {
-            const active = typeof activeOverride === 'boolean' ? activeOverride : glassEnabled;
-            glassEnabled = active;
-            const op = typeof currentOpacity === 'number' ? currentOpacity : 0.0;
-            try {
-                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
-                    window.__TAURI_INTERNALS__.invoke('set_widget_glass', {
-                        enabled: active,
+        function nativeGlassTuningParams() {
+            const info = getCurrentVariantInfo();
+            return {
+                refraction: currentRefract !== null ? currentRefract : info.defaultRefract,
+                blur: currentBlur !== null ? currentBlur : info.defaultBlur,
+                highlight: (currentHighlight !== null ? currentHighlight : info.defaultHighlight) / 100.0,
+                arcHeight: currentArcHeight !== null ? currentArcHeight : (info.defaultArcHeight || 20)
+            };
+        }
+
+        function applyGlassTuningCss() {
+            const p = nativeGlassTuningParams();
+            document.documentElement.style.setProperty('--glass-highlight-mul', p.highlight.toString());
+            document.documentElement.style.setProperty('--glass-arc-height', `${p.arcHeight}px`);
+        }
+
+        function runNativeGlassSync() {
+            const pending = nativeGlassSyncPending;
+            nativeGlassSyncPending = { glass: false, tuning: false };
+            lastNativeGlassSyncAt = performance.now();
+            if (typeof window.__TAURI_INTERNALS__ === 'undefined' || !window.__TAURI_INTERNALS__.invoke) return;
+            const invoke = window.__TAURI_INTERNALS__.invoke;
+
+            if (pending.glass) {
+                const op = typeof currentOpacity === 'number' ? currentOpacity : 0.0;
+                const signature = `${glassEnabled}|${op}|${isGlassDark}|${currentGlassVariant}`;
+                if (signature !== lastNativeGlassSignature) {
+                    lastNativeGlassSignature = signature;
+                    invoke('set_widget_glass', {
+                        enabled: glassEnabled,
                         opacity: op,
                         isDark: isGlassDark,
                         variant: currentGlassVariant
                     }).catch(() => {});
                 }
-            } catch (_) {}
-            syncGlassTuning();
+            }
+
+            if (pending.tuning) {
+                const p = nativeGlassTuningParams();
+                const signature = `${p.refraction}|${p.blur}|${p.highlight}|${p.arcHeight}`;
+                if (signature !== lastNativeTuningSignature) {
+                    lastNativeTuningSignature = signature;
+                    invoke('tune_widget_glass', p).catch(() => {});
+                }
+            }
+        }
+
+        function scheduleNativeGlassSync(kind, flush) {
+            nativeGlassSyncPending[kind] = true;
+            if (flush) {
+                if (nativeGlassSyncTimer !== null) {
+                    clearTimeout(nativeGlassSyncTimer);
+                    nativeGlassSyncTimer = null;
+                }
+                runNativeGlassSync();
+                return;
+            }
+            if (nativeGlassSyncTimer !== null) return;
+            const elapsed = performance.now() - lastNativeGlassSyncAt;
+            const delay = Math.max(0, NATIVE_GLASS_SYNC_INTERVAL_MS - elapsed);
+            if (delay === 0) {
+                runNativeGlassSync();
+                return;
+            }
+            nativeGlassSyncTimer = setTimeout(() => {
+                nativeGlassSyncTimer = null;
+                runNativeGlassSync();
+            }, delay);
+        }
+
+        // 同步 macOS 原生液态玻璃调优参数（折射曲率、柔焦高斯模糊、高光棱镜强度、光弧厚度）
+        const syncGlassTuning = (flush = false) => {
+            applyGlassTuningCss();
+            scheduleNativeGlassSync('tuning', flush);
+        };
+
+        // 同步 macOS 原生液态玻璃（NSGlassEffectView + CABackdropLayer 光学折射参数）
+        const syncNativeLiquidGlass = (activeOverride, flush = true) => {
+            const active = typeof activeOverride === 'boolean' ? activeOverride : glassEnabled;
+            glassEnabled = active;
+            applyGlassTuningCss();
+            scheduleNativeGlassSync('glass', flush);
+            scheduleNativeGlassSync('tuning', flush);
         };
 
         // 鼠标位置驱动的液态玻璃焦散高光坐标更新
@@ -1143,6 +1198,20 @@
             await loadShelfConfig();
             await refreshShelfItems();
             setupDragDropListeners();
+
+            const grid = document.getElementById('appGrid');
+            if (grid) {
+                grid.addEventListener('click', (e) => {
+                    const item = e.target.closest ? e.target.closest('.app-item') : null;
+                    if (!item) return;
+                    onAppItemClick(item.dataset.path);
+                });
+                grid.addEventListener('contextmenu', (e) => {
+                    const item = e.target.closest ? e.target.closest('.app-item') : null;
+                    if (!item) return;
+                    onAppItemContextMenu(e, item.dataset.id, item.dataset.path);
+                });
+            }
             window.addEventListener('storage', (e) => {
                 if (e.key === 'liquid_glass_variant' && e.newValue !== null) {
                     const v = parseInt(e.newValue, 10);
@@ -1225,17 +1294,23 @@
 
             grid.style.display = 'grid';
             grid.innerHTML = appItems.map(item => {
-                const iconSrc = item.icon_data || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="%236366f1"><rect width="20" height="20" x="2" y="2" rx="5"/></svg>';
+                const iconSrc = item.icon_data || toAssetUrl(item.icon_path) || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="%236366f1"><rect width="20" height="20" x="2" y="2" rx="5"/></svg>';
                 return `
-                    <div class="app-item" data-id="${item.id}" data-path="${encodeURIComponent(item.path)}"
-                        onclick="onAppItemClick('${encodeURIComponent(item.path)}')"
-                        oncontextmenu="onAppItemContextMenu(event, '${item.id}', '${encodeURIComponent(item.path)}')"
+                    <div class="app-item" data-id="${escapeHtml(item.id)}" data-path="${encodeURIComponent(item.path)}"
                         title="${escapeHtml(item.name)}&#10;${escapeHtml(item.path)}">
                         <img class="app-icon" src="${iconSrc}" alt="${escapeHtml(item.name)}" draggable="false">
                         <span class="app-title">${escapeHtml(item.name)}</span>
                     </div>
                 `;
             }).join('');
+        }
+
+        function toAssetUrl(path) {
+            if (!path) return '';
+            const encoded = encodeURIComponent(path);
+            return navigator.userAgent.includes('Windows')
+                ? `http://asset.localhost/${encoded}`
+                : `asset://localhost/${encoded}`;
         }
 
         function escapeHtml(text) {
@@ -1276,9 +1351,6 @@
             const options = targetLabel ? { target } : undefined;
             if (typeof window.__TAURI_LISTEN__ === 'function') {
                 return window.__TAURI_LISTEN__(eventName, cb, options);
-            }
-            if (window.__TAURI__ && window.__TAURI__.event && typeof window.__TAURI__.event.listen === 'function') {
-                return window.__TAURI__.event.listen(eventName, cb, options);
             }
             if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke && window.__TAURI_INTERNALS__.transformCallback) {
                 return window.__TAURI_INTERNALS__.invoke('plugin:event|listen', {
@@ -1561,7 +1633,7 @@
         }
 
         // 底色叠加浓度管理 (0.0 = 100% 纯原生 NSGlassEffectView)
-        function setShelfOpacity(val, persist = true, animate = false) {
+        function setShelfOpacity(val, persist = true, animate = false, flushNative = true) {
             const parsed = parseFloat(val);
             const clamped = Math.max(0.0, Math.min(0.85, Number.isNaN(parsed) ? 0.0 : parsed));
             currentOpacity = clamped;
@@ -1584,7 +1656,7 @@
 
             document.documentElement.style.setProperty('--glass-tint-alpha', clamped.toString());
             document.documentElement.style.setProperty('--widget-opacity', clamped.toString());
-            syncNativeLiquidGlass();
+            syncNativeLiquidGlass(undefined, flushNative);
 
             const percent = Math.round(clamped * 100);
             const badge = document.getElementById('opacityBadge');
@@ -1623,12 +1695,12 @@
 
         function onOpacityInput(e) {
             const val = parseInt(e.target.value, 10) / 100;
-            setShelfOpacity(val, false, false);
+            setShelfOpacity(val, false, false, false);
         }
 
         function onOpacityChange(e) {
             const val = parseInt(e.target.value, 10) / 100;
-            setShelfOpacity(val, true, false);
+            setShelfOpacity(val, true, false, true);
         }
 
         function setPresetOpacity(val) {
