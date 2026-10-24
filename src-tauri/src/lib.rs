@@ -1136,6 +1136,17 @@ struct AppState {
     is_suppressing_save: Arc<AtomicBool>,
     /// 小组件移动防抖持久化令牌
     widget_move_debounce_token: Arc<AtomicU64>,
+    /// 唤醒/网络恢复时打断 WebSocket 退避等待
+    ws_retry_notify: Arc<tokio::sync::Notify>,
+}
+
+fn request_ws_retry_if_needed(app: &tauri::AppHandle) {
+    let state: tauri::State<AppState> = app.state();
+    let running = *state.ws_running.lock().unwrap();
+    let connected = state.ws_status.lock().map(|s| s.as_str() == "connected").unwrap_or(false);
+    if running && !connected {
+        state.ws_retry_notify.notify_one();
+    }
 }
 
 fn emit_status(app: &tauri::AppHandle, ws_status: &Arc<Mutex<String>>, status: &str) {
@@ -1394,10 +1405,9 @@ async fn test_connection(
         let host = server_url
             .trim_start_matches("https://")
             .trim_start_matches("http://");
+        debug_log!("🧪 测试连接到: {}{}/stream", protocol, host);
         format!("{}{}/stream?token={}", protocol, host, client_token)
     };
-
-    println!("🧪 测试连接到: {}", ws_url);
 
     // 尝试解析 URL
     let url = url::Url::parse(&ws_url)
@@ -1462,9 +1472,10 @@ async fn start_websocket(
 
     let ws_running_clone = state.ws_running.clone();
     let ws_status_clone = state.ws_status.clone();
-    
+    let ws_retry_clone = state.ws_retry_notify.clone();
+
     tokio::spawn(async move {
-        if let Err(e) = run_websocket(app, config, ws_running_clone, ws_status_clone).await {
+        if let Err(e) = run_websocket(app, config, ws_running_clone, ws_status_clone, ws_retry_clone).await {
             eprintln!("WebSocket error: {}", e);
         }
     });
@@ -1490,6 +1501,16 @@ async fn is_websocket_running(state: State<'_, AppState>) -> Result<bool, String
 async fn get_connection_status(state: State<'_, AppState>) -> Result<String, String> {
     let status = state.ws_status.lock().unwrap();
     Ok(status.clone())
+}
+
+#[tauri::command]
+async fn request_reconnect(state: State<'_, AppState>) -> Result<(), String> {
+    let running = *state.ws_running.lock().unwrap();
+    let connected = state.ws_status.lock().map(|s| s.as_str() == "connected").unwrap_or(false);
+    if running && !connected {
+        state.ws_retry_notify.notify_one();
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -1536,6 +1557,7 @@ async fn run_websocket(
     config: ConnectionConfig,
     ws_running: Arc<Mutex<bool>>,
     ws_status: Arc<Mutex<String>>,
+    ws_retry_notify: Arc<tokio::sync::Notify>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // 构建 WebSocket URL
     let ws_url = {
@@ -1548,10 +1570,10 @@ async fn run_websocket(
         let host = server_url
             .trim_start_matches("https://")
             .trim_start_matches("http://");
+        debug_log!("Connecting to WebSocket: {}{}/stream", protocol, host);
         format!("{}{}/stream?token={}", protocol, host, config.client_token)
     };
 
-    println!("Connecting to WebSocket: {}", ws_url);
     let url = url::Url::parse(&ws_url)?;
 
     let mut reconnect_attempt = 0u32;
@@ -1624,7 +1646,7 @@ async fn run_websocket(
                                                 obj.insert("should_play_sound".to_string(), serde_json::Value::Bool(should_sound));
                                             }
                                             match window.emit("gotify-message", &payload) {
-                                                Ok(_) => println!("✅ 消息已推送到前端"),
+                                                Ok(_) => debug_log!("✅ 消息已推送到前端"),
                                                 Err(e) => eprintln!("❌ 推送失败: {}", e),
                                             }
                                         } else {
@@ -1684,11 +1706,17 @@ async fn run_websocket(
         }
 
         reconnect_attempt += 1;
-        // 指数退避重连等待时间：2s, 4s, 8s, 16s, 最大 30s
+        // 指数退避重连等待时间：2s, 4s, 8s, 16s, 最大 30s；唤醒/网络恢复可立即打断
         let delay_secs = std::cmp::min(1u64 << reconnect_attempt.min(5), 30);
         emit_status(&app, &ws_status, "reconnecting");
         println!("⏳ {} 秒后尝试重新连接...", delay_secs);
-        tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
+        tokio::select! {
+            _ = tokio::time::sleep(std::time::Duration::from_secs(delay_secs)) => {}
+            _ = ws_retry_notify.notified() => {
+                println!("⚡ 唤醒/网络恢复，立即重连");
+                reconnect_attempt = 0;
+            }
+        }
     }
 
     emit_status(&app, &ws_status, "disconnected");
@@ -1703,7 +1731,6 @@ async fn run_websocket(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_shell::init())
         .manage(AppState {
             config: Arc::new(Mutex::new(load_config_from_file())),
             ws_running: Arc::new(Mutex::new(false)),
@@ -1714,6 +1741,7 @@ pub fn run() {
             dock_menu_item: Arc::new(Mutex::new(None)),
             is_suppressing_save: Arc::new(AtomicBool::new(true)),
             widget_move_debounce_token: Arc::new(AtomicU64::new(0)),
+            ws_retry_notify: Arc::new(tokio::sync::Notify::new()),
         })
         .setup(|app| {
             // macOS: 根据用户设置决定是否显示 Dock 图标
@@ -1757,7 +1785,11 @@ pub fn run() {
                     #[cfg(target_os = "macos")]
                     if macos_window::display_is_asleep() {
                         last_client_pos = [None, None];
+                        let sleep_started = std::time::SystemTime::now();
                         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                        if sleep_started.elapsed().map(|d| d.as_secs() > 4).unwrap_or(false) {
+                            request_ws_retry_if_needed(&hover_app);
+                        }
                         continue;
                     }
 
@@ -1814,7 +1846,15 @@ pub fn run() {
                     } else {
                         100
                     };
+                    let sleep_started = std::time::SystemTime::now();
                     tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
+                    // 系统睡眠会让定时器显著超时；检测到时间跳变即视为唤醒并立即重连
+                    let jumped = sleep_started.elapsed()
+                        .map(|d| d.as_millis() > u128::from(delay_ms) + 3000)
+                        .unwrap_or(false);
+                    if jumped {
+                        request_ws_retry_if_needed(&hover_app);
+                    }
                 }
             });
 
@@ -1932,8 +1972,9 @@ pub fn run() {
 
                         let ws_running_clone = state.ws_running.clone();
                         let ws_status_clone = state.ws_status.clone();
+                        let ws_retry_clone = state.ws_retry_notify.clone();
                         tokio::spawn(async move {
-                            if let Err(e) = run_websocket(app_handle, config, ws_running_clone, ws_status_clone).await {
+                            if let Err(e) = run_websocket(app_handle, config, ws_running_clone, ws_status_clone, ws_retry_clone).await {
                                 eprintln!("WebSocket error: {}", e);
                             }
                         });
@@ -2106,6 +2147,8 @@ pub fn run() {
                 // 造成两个小组件互相联动变磨砂；这里用原生逐窗口焦点事件替代。
                 let _ = window.emit_to(window.label(), "widget-focus", serde_json::json!({ "focused": focused }));
                 if *focused {
+                    // 睡眠唤醒或网络切换后用户一回到小组件，立即打断退避等待重连
+                    request_ws_retry_if_needed(window.app_handle());
                     // 当桌面小组件被点击获得焦点时，临时提升层级到前台 (Level 3)，让用户能够看清并无阻碍操作
                     #[cfg(target_os = "macos")]
                     {
@@ -2250,6 +2293,8 @@ pub fn run() {
             stop_websocket,
             is_websocket_running,
             get_connection_status,
+            request_reconnect,
+            open_external_url,
             show_settings_window,
             test_settings_window,
             get_system_theme,
@@ -3146,7 +3191,47 @@ fn remove_app_from_shelf(id: String) -> Result<Vec<AppShelfItem>, String> {
 }
 
 #[tauri::command]
+fn open_external_url(url: String) -> Result<(), String> {
+    let parsed = url::Url::parse(url.trim()).map_err(|_| "链接格式无效".to_string())?;
+    if !matches!(parsed.scheme(), "http" | "https" | "mailto") {
+        return Err(format!("不支持的链接协议: {}", parsed.scheme()));
+    }
+    let target = parsed.as_str();
+    if target.chars().any(|c| c.is_control()) {
+        return Err("链接包含非法字符".to_string());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(target)
+            .spawn()
+            .map_err(|e| format!("打开链接失败: {}", e))?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("rundll32")
+            .args(["url.dll,FileProtocolHandler", target])
+            .spawn()
+            .map_err(|e| format!("打开链接失败: {}", e))?;
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(target)
+            .spawn()
+            .map_err(|e| format!("打开链接失败: {}", e))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn open_app_item(path: String) -> Result<(), String> {
+    let items = load_app_shelf_items_from_file();
+    if !items.iter().any(|item| item.path == path) {
+        return Err("该应用不在应用盒中".to_string());
+    }
+
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
@@ -3173,6 +3258,11 @@ fn open_app_item(path: String) -> Result<(), String> {
 
 #[tauri::command]
 fn show_in_finder(path: String) -> Result<(), String> {
+    let items = load_app_shelf_items_from_file();
+    if !items.iter().any(|item| item.path == path) {
+        return Err("该应用不在应用盒中".to_string());
+    }
+
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")

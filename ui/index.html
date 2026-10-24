@@ -1268,7 +1268,7 @@
         function onRefractSliderChange(e) {
             currentRefract = parseFloat(e.target.value);
             localStorage.setItem('liquid_glass_refract', String(currentRefract));
-            syncGlassTuning();
+            syncGlassTuning(true);
         }
 
         function onBlurSliderInput(e) {
@@ -1282,7 +1282,7 @@
         function onBlurSliderChange(e) {
             currentBlur = parseFloat(e.target.value);
             localStorage.setItem('liquid_glass_blur', String(currentBlur));
-            syncGlassTuning();
+            syncGlassTuning(true);
         }
 
         function onHighlightSliderInput(e) {
@@ -1297,7 +1297,7 @@
         function onHighlightSliderChange(e) {
             currentHighlight = parseFloat(e.target.value);
             localStorage.setItem('liquid_glass_highlight', String(currentHighlight));
-            syncGlassTuning();
+            syncGlassTuning(true);
         }
 
         function onArcHeightSliderInput(e) {
@@ -1312,7 +1312,7 @@
         function onArcHeightSliderChange(e) {
             currentArcHeight = parseFloat(e.target.value);
             localStorage.setItem('liquid_glass_arc_height', String(currentArcHeight));
-            syncGlassTuning();
+            syncGlassTuning(true);
         }
 
         function resetGlassToDefaults(e) {
@@ -1330,25 +1330,86 @@
             syncGlassTuning();
         }
 
-        // 同步 macOS 原生液态玻璃调优参数（折射曲率、柔焦高斯模糊、反光亮度、反光厚度）
-        const syncGlassTuning = () => {
+        // 滑杆拖动时把原生 IPC 合并到约 15 次/秒，CSS 侧仍然逐帧跟手
+        const NATIVE_GLASS_SYNC_INTERVAL_MS = 66;
+        let nativeGlassSyncTimer = null;
+        let nativeGlassSyncPending = { glass: false, tuning: false };
+        let lastNativeGlassSyncAt = 0;
+        let lastNativeGlassSignature = '';
+        let lastNativeTuningSignature = '';
+
+        function nativeGlassTuningParams() {
             const info = getCurrentVariantInfo();
-            const r = currentRefract !== null ? currentRefract : info.defaultRefract;
-            const b = currentBlur !== null ? currentBlur : info.defaultBlur;
-            const h = (currentHighlight !== null ? currentHighlight : info.defaultHighlight) / 100.0;
-            const a = currentArcHeight !== null ? currentArcHeight : (info.defaultArcHeight || 20);
-            document.documentElement.style.setProperty('--glass-highlight-mul', h.toString());
-            document.documentElement.style.setProperty('--glass-arc-height', `${a}px`);
-            try {
-                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
-                    window.__TAURI_INTERNALS__.invoke('tune_widget_glass', {
-                        refraction: r,
-                        blur: b,
-                        highlight: h,
-                        arcHeight: a
+            return {
+                refraction: currentRefract !== null ? currentRefract : info.defaultRefract,
+                blur: currentBlur !== null ? currentBlur : info.defaultBlur,
+                highlight: (currentHighlight !== null ? currentHighlight : info.defaultHighlight) / 100.0,
+                arcHeight: currentArcHeight !== null ? currentArcHeight : (info.defaultArcHeight || 20)
+            };
+        }
+
+        function applyGlassTuningCss() {
+            const p = nativeGlassTuningParams();
+            document.documentElement.style.setProperty('--glass-highlight-mul', p.highlight.toString());
+            document.documentElement.style.setProperty('--glass-arc-height', `${p.arcHeight}px`);
+        }
+
+        function runNativeGlassSync() {
+            const pending = nativeGlassSyncPending;
+            nativeGlassSyncPending = { glass: false, tuning: false };
+            lastNativeGlassSyncAt = performance.now();
+            if (typeof window.__TAURI_INTERNALS__ === 'undefined' || !window.__TAURI_INTERNALS__.invoke) return;
+            const invoke = window.__TAURI_INTERNALS__.invoke;
+
+            if (pending.glass) {
+                const signature = `${glassEnabled}|${currentWidgetOpacity}|${isGlassDark}|${currentGlassVariant}`;
+                if (signature !== lastNativeGlassSignature) {
+                    lastNativeGlassSignature = signature;
+                    invoke('set_widget_glass', {
+                        enabled: glassEnabled,
+                        opacity: currentWidgetOpacity,
+                        isDark: isGlassDark,
+                        variant: currentGlassVariant
                     }).catch(() => {});
                 }
-            } catch (_) {}
+            }
+
+            if (pending.tuning) {
+                const p = nativeGlassTuningParams();
+                const signature = `${p.refraction}|${p.blur}|${p.highlight}|${p.arcHeight}`;
+                if (signature !== lastNativeTuningSignature) {
+                    lastNativeTuningSignature = signature;
+                    invoke('tune_widget_glass', p).catch(() => {});
+                }
+            }
+        }
+
+        function scheduleNativeGlassSync(kind, flush) {
+            nativeGlassSyncPending[kind] = true;
+            if (flush) {
+                if (nativeGlassSyncTimer !== null) {
+                    clearTimeout(nativeGlassSyncTimer);
+                    nativeGlassSyncTimer = null;
+                }
+                runNativeGlassSync();
+                return;
+            }
+            if (nativeGlassSyncTimer !== null) return;
+            const elapsed = performance.now() - lastNativeGlassSyncAt;
+            const delay = Math.max(0, NATIVE_GLASS_SYNC_INTERVAL_MS - elapsed);
+            if (delay === 0) {
+                runNativeGlassSync();
+                return;
+            }
+            nativeGlassSyncTimer = setTimeout(() => {
+                nativeGlassSyncTimer = null;
+                runNativeGlassSync();
+            }, delay);
+        }
+
+        const syncGlassTuning = (flush = false) => {
+            applyGlassTuningCss();
+            scheduleNativeGlassSync('tuning', flush);
         };
 
         try {
@@ -1442,20 +1503,12 @@
         let isMouseInsideCard = false;
         let glassEnabled = true;
 
-        const syncNativeLiquidGlass = (activeOverride) => {
+        const syncNativeLiquidGlass = (activeOverride, flush = true) => {
             const nextGlass = typeof activeOverride === 'boolean' ? activeOverride : glassEnabled;
             glassEnabled = nextGlass;
-            try {
-                if (typeof window.__TAURI_INTERNALS__ !== 'undefined' && window.__TAURI_INTERNALS__.invoke) {
-                    window.__TAURI_INTERNALS__.invoke('set_widget_glass', {
-                        enabled: nextGlass,
-                        opacity: currentWidgetOpacity,
-                        isDark: isGlassDark,
-                        variant: currentGlassVariant
-                    }).catch(() => {});
-                }
-            } catch (_) {}
-            syncGlassTuning();
+            applyGlassTuningCss();
+            scheduleNativeGlassSync('glass', flush);
+            scheduleNativeGlassSync('tuning', flush);
         };
 
         const updateGlassSpecularPoint = (x, y) => {
@@ -1589,7 +1642,7 @@
         });
 
         // 底色叠加浓度管理 (0.0 = 100% 纯原生 NSGlassEffectView)
-        function setWidgetOpacity(opacity, persist = true, animate = false) {
+        function setWidgetOpacity(opacity, persist = true, animate = false, flushNative = true) {
             const parsed = parseFloat(opacity);
             const val = Math.max(0.0, Math.min(0.85, Number.isNaN(parsed) ? 0.0 : parsed));
             currentWidgetOpacity = val;
@@ -1614,7 +1667,7 @@
             document.documentElement.style.setProperty('--widget-opacity', val.toString());
 
             // 同步更新 macOS 原生 NSGlassEffectView 的风格与色调参数
-            syncNativeLiquidGlass();
+            syncNativeLiquidGlass(undefined, flushNative);
 
             const percent = Math.round(val * 100);
             const label = document.getElementById('opacityValLabel');
@@ -1662,12 +1715,12 @@
 
         function onOpacitySliderInput(event) {
             const percent = parseInt(event.target.value, 10);
-            setWidgetOpacity((Number.isNaN(percent) ? 0 : percent) / 100, false, false);
+            setWidgetOpacity((Number.isNaN(percent) ? 0 : percent) / 100, false, false, false);
         }
 
         function onOpacitySliderChange(event) {
             const percent = parseInt(event.target.value, 10);
-            setWidgetOpacity((Number.isNaN(percent) ? 0 : percent) / 100, true, false);
+            setWidgetOpacity((Number.isNaN(percent) ? 0 : percent) / 100, true, false, true);
         }
 
         function applyOpacityPreset(val) {
@@ -1805,7 +1858,66 @@
             }
         }
 
-        // 渲染小组件通知列表
+        const renderedNotificationCards = new Map();
+
+        function notificationCardSignature(notif) {
+            return [
+                notif.title || '',
+                notif.message || '',
+                notif.date || '',
+                notif.priority,
+                notif.pinned ? 1 : 0,
+                notif.expanded ? 1 : 0,
+                notif.unread ? 1 : 0,
+                notif.unread ? (currentUnreadEffect || 'none') : '',
+                notif.unread && unreadBounceConfig.enabled ? 1 : 0
+            ].join('\u0001');
+        }
+
+        function buildNotificationCard(notif) {
+            const timeAgo = formatTime(notif.date);
+            const priorityClass = getPriorityClass(notif.priority);
+            const pinnedClass = notif.pinned ? 'pinned' : '';
+            const expandedClass = notif.expanded ? 'expanded' : '';
+            const unreadEffectClass = (notif.unread && currentUnreadEffect && currentUnreadEffect !== 'none')
+                ? `unread-effect-${currentUnreadEffect}`
+                : '';
+            const unreadBounceClass = (notif.unread && unreadBounceConfig.enabled)
+                ? 'unread-bounce-active'
+                : '';
+
+            const template = document.createElement('template');
+            template.innerHTML = `
+                <div class="widget-item priority-${priorityClass} ${pinnedClass} ${expandedClass} ${unreadEffectClass} ${unreadBounceClass}" data-id="${notif.id}" onclick="toggleExpand(${notif.id})" onmouseenter="markNotificationRead(${notif.id}, this)" title="${notif.expanded ? '点击收起详情' : '点击展开查看详情'}">
+                    <div class="widget-item-header">
+                        <span class="widget-item-title">${escapeHtml(notif.title || 'Gotify 通知')}</span>
+                        <div class="widget-item-meta">
+                            ${notif.pinned ? '<span class="widget-pin-icon" title="已置顶">📌</span>' : ''}
+                            <span class="widget-item-time">${timeAgo}</span>
+                        </div>
+                    </div>
+                    <div class="widget-item-desc" id="widget-msg-${notif.id}">
+                        ${notif.expanded ? renderMessage(notif) : escapeHtml((notif.message || '').replace(/<[^>]*>?/gm, ''))}
+                    </div>
+                    ${notif.expanded ? `
+                        <div class="widget-item-actions" onclick="event.stopPropagation()">
+                            <button class="widget-mini-btn" onclick="togglePin(${notif.id}, event)" title="${notif.pinned ? '取消置顶' : '置顶'}">
+                                ${notif.pinned ? '📍 取消置顶' : '📌 置顶'}
+                            </button>
+                            <button class="widget-mini-btn" onclick="copyNotificationText(${notif.id}, event)" title="复制消息内容">
+                                📋 复制
+                            </button>
+                            <button class="widget-mini-btn delete" onclick="deleteNotification(${notif.id}, event)" title="删除此通知">
+                                🗑️ 删除
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
+            `.trim();
+            return template.content.firstElementChild;
+        }
+
+        // 渲染小组件通知列表：按 id 复用节点，只增删/替换变化的卡片
         function renderWidgetNotifications() {
             const listEl = document.getElementById('widgetMessageList');
             const badgeEl = document.getElementById('widgetBadge');
@@ -1821,6 +1933,7 @@
             }
 
             if (typeof notifications === 'undefined' || !notifications || notifications.length === 0) {
+                renderedNotificationCards.clear();
                 if (listEl.querySelector('.widget-empty')) {
                     // 若已处于暂无通知状态，无需重复销毁重建 DOM，避免触发 WebKit 重排与合成层刷新
                     return;
@@ -1845,46 +1958,55 @@
                 return new Date(b.date) - new Date(a.date);
             });
 
-            listEl.innerHTML = sortedNotifs.map(notif => {
-                const timeAgo = formatTime(notif.date);
-                const priorityClass = getPriorityClass(notif.priority);
-                const pinnedClass = notif.pinned ? 'pinned' : '';
-                const expandedClass = notif.expanded ? 'expanded' : '';
-                const unreadEffectClass = (notif.unread && currentUnreadEffect && currentUnreadEffect !== 'none')
-                    ? `unread-effect-${currentUnreadEffect}`
-                    : '';
-                const unreadBounceClass = (notif.unread && unreadBounceConfig.enabled)
-                    ? 'unread-bounce-active'
-                    : '';
+            const keepIds = new Set();
+            const orderedCards = [];
 
-                return `
-                    <div class="widget-item priority-${priorityClass} ${pinnedClass} ${expandedClass} ${unreadEffectClass} ${unreadBounceClass}" data-id="${notif.id}" onclick="toggleExpand(${notif.id})" onmouseenter="markNotificationRead(${notif.id}, this)" title="${notif.expanded ? '点击收起详情' : '点击展开查看详情'}">
-                        <div class="widget-item-header">
-                            <span class="widget-item-title">${escapeHtml(notif.title || 'Gotify 通知')}</span>
-                            <div class="widget-item-meta">
-                                ${notif.pinned ? '<span class="widget-pin-icon" title="已置顶">📌</span>' : ''}
-                                <span class="widget-item-time">${timeAgo}</span>
-                            </div>
-                        </div>
-                        <div class="widget-item-desc" id="widget-msg-${notif.id}">
-                            ${notif.expanded ? renderMessage(notif) : escapeHtml((notif.message || '').replace(/<[^>]*>?/gm, ''))}
-                        </div>
-                        ${notif.expanded ? `
-                            <div class="widget-item-actions" onclick="event.stopPropagation()">
-                                <button class="widget-mini-btn" onclick="togglePin(${notif.id}, event)" title="${notif.pinned ? '取消置顶' : '置顶'}">
-                                    ${notif.pinned ? '📍 取消置顶' : '📌 置顶'}
-                                </button>
-                                <button class="widget-mini-btn" onclick="copyNotificationText(${notif.id}, event)" title="复制消息内容">
-                                    📋 复制
-                                </button>
-                                <button class="widget-mini-btn delete" onclick="deleteNotification(${notif.id}, event)" title="删除此通知">
-                                    🗑️ 删除
-                                </button>
-                            </div>
-                        ` : ''}
-                    </div>
-                `;
-            }).join('');
+            for (const notif of sortedNotifs) {
+                keepIds.add(notif.id);
+                const signature = notificationCardSignature(notif);
+                let entry = renderedNotificationCards.get(notif.id);
+                if (!entry || entry.signature !== signature) {
+                    const el = buildNotificationCard(notif);
+                    if (entry && entry.el.parentNode) {
+                        entry.el.replaceWith(el);
+                    }
+                    entry = { el, signature };
+                    renderedNotificationCards.set(notif.id, entry);
+                }
+                orderedCards.push(entry.el);
+            }
+
+            for (const [id, entry] of renderedNotificationCards) {
+                if (!keepIds.has(id)) {
+                    entry.el.remove();
+                    renderedNotificationCards.delete(id);
+                }
+            }
+
+            const emptyEl = listEl.querySelector('.widget-empty');
+            if (emptyEl) emptyEl.remove();
+
+            const cardSet = new Set(orderedCards);
+            let cursor = listEl.firstElementChild;
+            while (cursor && !cardSet.has(cursor)) {
+                const next = cursor.nextElementSibling;
+                cursor.remove();
+                cursor = next;
+            }
+
+            for (const el of orderedCards) {
+                if (el === cursor) {
+                    cursor = cursor.nextElementSibling;
+                } else {
+                    listEl.insertBefore(el, cursor || null);
+                }
+            }
+
+            while (cursor) {
+                const next = cursor.nextElementSibling;
+                if (!cardSet.has(cursor)) cursor.remove();
+                cursor = next;
+            }
         }
 
         function updateTranslations() {
@@ -2017,7 +2139,7 @@
                 const { invoke } = window.__TAURI_INTERNALS__;
                 const config = await invoke('get_config');
                 if (config && config.server_url) {
-                    await invoke('plugin:shell|open', { path: config.server_url });
+                    await invoke('open_external_url', { url: config.server_url });
                 }
             } catch (error) {
                 console.error('❌ 打开网页失败:', error);
@@ -2189,10 +2311,17 @@
                             if (invoke) {
                                 const currentStatus = await invoke('get_connection_status');
                                 updateConnectionStatus(currentStatus);
+                                if (currentStatus !== 'connected' && currentStatus !== 'connecting') {
+                                    invoke('request_reconnect').catch(() => {});
+                                }
                             }
                         } catch (_) { }
                     };
                     window.addEventListener('focus', syncConnectionStatus);
+                    window.addEventListener('online', syncConnectionStatus);
+                    document.addEventListener('visibilitychange', () => {
+                        if (!document.hidden) syncConnectionStatus();
+                    });
 
                     // 获取服务器地址用于解析图片相对路径
                     try {
@@ -2295,7 +2424,7 @@
             }
             try {
                 const { invoke } = window.__TAURI_INTERNALS__;
-                await invoke('plugin:shell|open', { path: safe });
+                await invoke('open_external_url', { url: safe });
             } catch (error) {
                 console.error('Failed to open URL:', error);
             }
@@ -2313,28 +2442,44 @@
             return DOMPurify.sanitize(html, PURIFY_CONFIG);
         }
 
+        const renderedMessageCache = new Map();
+
         function renderMessage(notif) {
             const text = notif.message;
             if (!text) return '';
 
-            const isMarkdown = notif.extras &&
+            const isMarkdown = !!(notif.extras &&
                 notif.extras['client::display'] &&
-                notif.extras['client::display'].contentType === 'text/markdown';
+                notif.extras['client::display'].contentType === 'text/markdown');
 
+            const cached = renderedMessageCache.get(notif.id);
+            if (cached && cached.source === text && cached.markdown === isMarkdown) {
+                return cached.html;
+            }
+
+            let html = null;
             if (isMarkdown) {
                 try {
-                    return sanitizeHtml(marked.parse(notif.message));
+                    html = sanitizeHtml(marked.parse(text));
                 } catch (e) {
                     console.warn('Markdown render failed, fallback to text:', e);
                 }
             }
 
-            let html = escapeHtml(notif.message).replace(/\n/g, '<br>');
-            const urlRegex = /(https?:\/\/[^\s]+)/g;
-            html = html.replace(urlRegex, (url) => {
-                return `<a href="${url}" data-href="${url}" rel="noopener noreferrer">${url}</a>`;
-            });
-            return sanitizeHtml(html);
+            if (html === null) {
+                html = escapeHtml(text).replace(/\n/g, '<br>');
+                const urlRegex = /(https?:\/\/[^\s]+)/g;
+                html = html.replace(urlRegex, (url) => {
+                    return `<a href="${url}" data-href="${url}" rel="noopener noreferrer">${url}</a>`;
+                });
+                html = sanitizeHtml(html);
+            }
+
+            renderedMessageCache.set(notif.id, { source: text, markdown: isMarkdown, html });
+            if (renderedMessageCache.size > 200) {
+                renderedMessageCache.delete(renderedMessageCache.keys().next().value);
+            }
+            return html;
         }
 
         let lastConnectionStatus = null;
