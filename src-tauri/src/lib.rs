@@ -1900,14 +1900,9 @@ pub fn run() {
                 {
                     if let Ok(ns_win_ptr) = main_window.ns_window() {
                         let ptr = ns_win_ptr as *mut std::ffi::c_void;
-                        let init_op = if always_on_top {
-                            widget_config.floating_opacity
-                        } else {
-                            widget_config.desktop_opacity
-                        };
                         unsafe {
+                            // 安装时由原生层直接读取持久化的风格/反光参数，避免用硬编码默认值覆盖用户设定
                             macos_install_liquid_glass(ptr, 26.0, 0.0);
-                            macos_update_liquid_glass(ptr, if always_on_top { 1 } else { 0 }, init_op, 0, 11);
                         }
                         if always_on_top {
                             let _ = main_window.set_always_on_top(true);
@@ -3082,10 +3077,9 @@ pub fn create_app_shelf_window(app: &tauri::AppHandle) -> Result<tauri::WebviewW
     {
         if let Ok(ns_win_ptr) = win.ns_window() {
             let ptr = ns_win_ptr as *mut std::ffi::c_void;
-            let init_op = if cfg.always_on_top { cfg.floating_opacity } else { cfg.desktop_opacity };
             unsafe {
+                // 安装时由原生层直接读取持久化的风格/反光参数
                 macos_install_liquid_glass(ptr, 26.0, 0.0);
-                macos_update_liquid_glass(ptr, if cfg.always_on_top { 1 } else { 0 }, init_op, 0, 11);
             }
             if cfg.always_on_top {
                 macos_window::schedule_set_floating(ptr, true);

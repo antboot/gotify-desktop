@@ -366,14 +366,16 @@ Key rules:
    - `inputKeyFillHighlightAmount`, `inputBlurFillLightenOpacity` – edge light / fill
    - `inputLumaNoiseScale`, arc height – texture & arc
    - `CASDFLayer` specular sublayers (`@2`, `@3`): `opacity ≈ 0.75 * highlightMultiplier`
-4. **Persist user tuning** as associated objects (`highlight`, `refraction`, `blur`, `arcHeight`) so it survives Apple's internal layer rebuilds.
-5. **Restoring after focus/appearance changes**: Apple rewrites the highlight when the window becomes/resigns key. Swizzle `-[NSGlassEffectView _windowChangedKeyState]` and re-apply the user's tuning asynchronously (e.g. at 30/120/400/900 ms) plus a 16 ms guard loop for ~640 ms.
-6. Keep `subduedState` pinned to `0`, and force `scrimState` / `interactionState` to `0` if the OS dims or pulses the panel.
-7. Kill stray CA transitions when snapping parameters:
+4. **Persist user tuning** as associated objects (`highlight`, `refraction`, `blur`, `arcHeight`) so it survives Apple's internal layer rebuilds. Associated objects are process-local, so also mirror them to `NSUserDefaults` and restore them inside the install path — otherwise a restart creates a fresh `NSGlassEffectView` at Apple's default highlight and the only recovery path is a frontend IPC re-send, which is timing-sensitive.
+5. **Restoring after focus/appearance changes**: Apple rewrites the highlight when the window becomes/resigns key. Swizzle `-[NSGlassEffectView _windowChangedKeyState]` and re-apply the user's tuning asynchronously (e.g. at 30/120/400/900 ms) plus a 16 ms guard loop for ~640 ms. Also schedule the same delayed re-apply right after view creation and after each tuning call, since the first on-screen frames can repaint with defaults.
+   - **The decisive fix is layer-level, not timing-level**: the SwiftUI host resets `@2`/`@3` opacity back to `1.0` during its first render, which can complete *after* every short restore burst (slow logins). A non-activating panel never gains key again, so the rim stays at Apple's full white forever — the classic "sometimes it's bright after restart" bug. Tag each `@2`/`@3` layer with the target opacity as an associated object and swizzle `-[CALayer setOpacity:]` to substitute the tagged value for any subsequent write; the layer can then never be reverted by SwiftUI. Add a 100 ms settle loop for ~5 s after creation/tuning to catch layers created late, and re-arm it on occlusion/screen/Space/wake/appearance changes.
+6. **Pre-paint CSS**: if the webview card mirrors the highlight with a CSS custom property, inject the persisted value from `localStorage` in `<head>` before body paint and call the CSS apply function at parse time. Otherwise the fallback value (often `1`) draws a bright default rim until the async init/listeners finish — a second, independent source of intermittent brightness.
+7. Keep `subduedState` pinned to `0`, and force `scrimState` / `interactionState` to `0` if the OS dims or pulses the panel.
+8. Kill stray CA transitions when snapping parameters:
    ```objc
    for (CALayer *l in layer.sublayers) { [l removeAllAnimations]; recurse(l); }
    ```
-8. NSGlassEffectView is **macOS 26+ only** — guard with `NSClassFromString` and fall back to CSS glass on older systems.
+9. NSGlassEffectView is **macOS 26+ only** — guard with `NSClassFromString` and fall back to CSS glass on older systems.
 
 ---
 

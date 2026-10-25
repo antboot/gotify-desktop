@@ -949,6 +949,19 @@
             transition: all 0.35s ease !important;
         }
     </style>
+    <script>
+        // 首帧前同步注入持久化亮度：否则 --glass-highlight-mul 会短暂回退到 1，
+        // 在初始化脚本跑完前画出一圈 Apple 默认满亮度的高光描边。
+        (function () {
+            try {
+                var root = document.documentElement;
+                var h = parseFloat(localStorage.getItem('liquid_glass_highlight'));
+                var a = parseFloat(localStorage.getItem('liquid_glass_arc_height'));
+                if (!isNaN(h)) root.style.setProperty('--glass-highlight-mul', (h / 100).toString());
+                if (!isNaN(a) && a > 0) root.style.setProperty('--glass-arc-height', a + 'px');
+            } catch (_) {}
+        })();
+    </script>
 </head>
 
 <body>
@@ -1354,6 +1367,9 @@
             document.documentElement.style.setProperty('--glass-arc-height', `${p.arcHeight}px`);
         }
 
+        // 解析到此处即应用一次，不等 IPC/事件注册完成，杜绝 CSS 回退值画出默认高光
+        applyGlassTuningCss();
+
         function runNativeGlassSync() {
             const pending = nativeGlassSyncPending;
             nativeGlassSyncPending = { glass: false, tuning: false };
@@ -1361,16 +1377,20 @@
             if (typeof window.__TAURI_INTERNALS__ === 'undefined' || !window.__TAURI_INTERNALS__.invoke) return;
             const invoke = window.__TAURI_INTERNALS__.invoke;
 
+            let glassTask = Promise.resolve();
             if (pending.glass) {
                 const signature = `${glassEnabled}|${currentWidgetOpacity}|${isGlassDark}|${currentGlassVariant}`;
                 if (signature !== lastNativeGlassSignature) {
                     lastNativeGlassSignature = signature;
-                    invoke('set_widget_glass', {
+                    glassTask = invoke('set_widget_glass', {
                         enabled: glassEnabled,
                         opacity: currentWidgetOpacity,
                         isDark: isGlassDark,
                         variant: currentGlassVariant
-                    }).catch(() => {});
+                    }).catch(() => {
+                        // 失败时清空签名，保证下一轮同步会重试，而不是被去重永久拦住
+                        lastNativeGlassSignature = '';
+                    });
                 }
             }
 
@@ -1379,7 +1399,10 @@
                 const signature = `${p.refraction}|${p.blur}|${p.highlight}|${p.arcHeight}`;
                 if (signature !== lastNativeTuningSignature) {
                     lastNativeTuningSignature = signature;
-                    invoke('tune_widget_glass', p).catch(() => {});
+                    // 切换风格时 set_widget_glass 会清空原生微调，必须等它完成后再下发参数
+                    glassTask.then(() => invoke('tune_widget_glass', p)).catch(() => {
+                        lastNativeTuningSignature = '';
+                    });
                 }
             }
         }
@@ -2159,6 +2182,10 @@
                     openUrl(href, e);
                 }, true);
             }
+
+            // 先落一次玻璃配置：后续事件注册即便失败也不能让页面停在默认高光
+            updateGlassVariantUI();
+            syncGlassTuning();
 
             await new Promise(resolve => setTimeout(resolve, 80));
 

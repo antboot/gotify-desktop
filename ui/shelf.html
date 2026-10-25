@@ -635,6 +635,18 @@
             }
         }
     </style>
+    <script>
+        // 首帧前同步注入持久化亮度，避免 CSS 回退值短暂画出默认满亮度描边
+        (function () {
+            try {
+                var root = document.documentElement;
+                var h = parseFloat(localStorage.getItem('liquid_glass_highlight'));
+                var a = parseFloat(localStorage.getItem('liquid_glass_arc_height'));
+                if (!isNaN(h)) root.style.setProperty('--glass-highlight-mul', (h / 100).toString());
+                if (!isNaN(a) && a > 0) root.style.setProperty('--glass-arc-height', a + 'px');
+            } catch (_) {}
+        })();
+    </script>
 </head>
 
 <body>
@@ -1031,6 +1043,8 @@
             document.documentElement.style.setProperty('--glass-arc-height', `${p.arcHeight}px`);
         }
 
+        applyGlassTuningCss();
+
         function runNativeGlassSync() {
             const pending = nativeGlassSyncPending;
             nativeGlassSyncPending = { glass: false, tuning: false };
@@ -1038,17 +1052,20 @@
             if (typeof window.__TAURI_INTERNALS__ === 'undefined' || !window.__TAURI_INTERNALS__.invoke) return;
             const invoke = window.__TAURI_INTERNALS__.invoke;
 
+            let glassTask = Promise.resolve();
             if (pending.glass) {
                 const op = typeof currentOpacity === 'number' ? currentOpacity : 0.0;
                 const signature = `${glassEnabled}|${op}|${isGlassDark}|${currentGlassVariant}`;
                 if (signature !== lastNativeGlassSignature) {
                     lastNativeGlassSignature = signature;
-                    invoke('set_widget_glass', {
+                    glassTask = invoke('set_widget_glass', {
                         enabled: glassEnabled,
                         opacity: op,
                         isDark: isGlassDark,
                         variant: currentGlassVariant
-                    }).catch(() => {});
+                    }).catch(() => {
+                        lastNativeGlassSignature = '';
+                    });
                 }
             }
 
@@ -1057,7 +1074,10 @@
                 const signature = `${p.refraction}|${p.blur}|${p.highlight}|${p.arcHeight}`;
                 if (signature !== lastNativeTuningSignature) {
                     lastNativeTuningSignature = signature;
-                    invoke('tune_widget_glass', p).catch(() => {});
+                    // 切换风格时 set_widget_glass 会清空原生微调，必须等它完成后再下发参数
+                    glassTask.then(() => invoke('tune_widget_glass', p)).catch(() => {
+                        lastNativeTuningSignature = '';
+                    });
                 }
             }
         }

@@ -276,11 +276,13 @@ NSView *glassView = [[GlassCls alloc] initWithFrame:contentView.bounds];
    - `inputKeyFillHighlightAmount` / `inputBlurFillLightenOpacity`：边缘高光与填充
    - `inputLumaNoiseScale`：纹理噪点
    - `CASDFLayer` 镜面层（`@2` / `@3`）：`opacity ≈ 0.75 × 反光系数`
-4. **持久化用户调优**：反光、折射、模糊、弧高写入 associated object，防止 Apple 内部重建图层后丢失。
+4. **持久化用户调优**：反光、折射、模糊、弧高写入 associated object，防止 Apple 内部重建图层后丢失；同时镜像到 `NSUserDefaults`，并在安装玻璃视图时优先恢复。关联对象只存在于当前进程，重启/重新登录后若不落盘，新建的 `NSGlassEffectView` 会退回 Apple 默认反光，只能依赖前端 IPC 重新下发（时序不可靠）。
 5. **焦点/外观变化后的恢复**：Apple 会在窗口获焦/失焦时重写高光。可 swizzle `-[NSGlassEffectView _windowChangedKeyState]`，并在 30/120/400/900ms 异步重刷用户参数；必要时以 16ms 守卫循环持续约 640ms 压住设定值。
-6. `subduedState` 固定为 `0`；如系统仍会变暗/脉冲，可把 `scrimState`、`interactionState` 一并锁定为 `0`。
-7. 参数快速切换时递归清理 CALayer 动画（`removeAllAnimations`），避免过渡拖影。
-8. NSGlassEffectView 仅 macOS 26+ 可用，需用 `NSClassFromString` 探测并回退到 CSS 玻璃。
+   - **真正的关键在图层层，而非时序**：SwiftUI 宿主会在首帧渲染时把 `@2`/`@3` 的 opacity 重置回 `1.0`，而这次渲染可能晚于所有短促重刷（登录繁忙时尤其明显）。非激活面板之后不会再获得焦点事件，于是高光永久停在 Apple 默认满亮度——这就是“重启后偶尔变亮”的根因。做法：给每个 `@2`/`@3` 层用 associated object 打上目标 opacity，并 swizzle `-[CALayer setOpacity:]`，对已打标层用目标值替换任何后续写入，SwiftUI 便再也改不回去。再加一个 100ms、持续约 5 秒的补标循环兜住晚创建的图层，并在遮挡/切屏/切换空间/唤醒/外观变化时重新武装。
+6. **首帧 CSS**：若 WebView 卡片用 CSS 变量镜像高光，必须在 `<head>` 里从 `localStorage` 同步注入持久化值，并在脚本解析阶段调用一次应用函数。否则变量回退值（通常是 `1`）会在异步初始化完成前画出一圈默认高光——这是另一个独立的“偶发变亮”来源。
+7. `subduedState` 固定为 `0`；如系统仍会变暗/脉冲，可把 `scrimState`、`interactionState` 一并锁定为 `0`。
+8. 参数快速切换时递归清理 CALayer 动画（`removeAllAnimations`），避免过渡拖影。
+9. NSGlassEffectView 仅 macOS 26+ 可用，需用 `NSClassFromString` 探测并回退到 CSS 玻璃。
 
 ---
 
